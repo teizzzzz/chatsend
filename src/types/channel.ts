@@ -36,6 +36,12 @@ export interface FileAcceptFrame {
   v: 1;
   type: 'file-accept';
   id: string;
+  /**
+   * Resume point in bytes. Non-zero when the receiver already holds a
+   * partial copy from an interrupted attempt — the sender starts pumping
+   * from here instead of byte 0 (断点续传).
+   */
+  offset?: number;
 }
 
 export interface FileRejectFrame {
@@ -110,7 +116,15 @@ export function parseFrame(raw: string): ChannelFrame | null {
       if (!file) return null;
       return { v: 1, type: 'file-offer', id: frame.id, file };
     }
-    case 'file-accept':
+    case 'file-accept': {
+      if (!isValidId(frame.id)) return null;
+      const rawOffset = (frame as { offset?: unknown }).offset;
+      const offset =
+        typeof rawOffset === 'number' && Number.isFinite(rawOffset) && rawOffset > 0
+          ? Math.floor(rawOffset)
+          : 0;
+      return { v: 1, type: 'file-accept', id: frame.id, offset };
+    }
     case 'file-reject':
     case 'file-cancel': {
       if (!isValidId(frame.id)) return null;

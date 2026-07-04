@@ -77,6 +77,12 @@ const cancelledSends = new Set<string>();
 let activeReceive: { id: string; assembler: ChunkAssembler } | null = null;
 /** Files waiting to be offered (multi-file selection / drag & drop). */
 const sendQueue: File[] = [];
+/**
+ * Partial downloads kept after an interrupted attempt so a retried offer
+ * resumes from where it stopped instead of starting over (断点续传).
+ * In-memory only: resume works within the page's lifetime.
+ */
+const partialReceives = new Map<string, ChunkAssembler>();
 
 function localDevice(): Device {
   const { deviceId, deviceName } = useAppStore.getState();
@@ -133,9 +139,19 @@ export const useSessionStore = create<SessionState>((set, get) => {
 
   /** Finish an incoming file: build the Blob, expose a download URL. */
   const finishReceive = (id: string, blob: Blob): void => {
+    partialReceives.delete(id);
     const url = URL.createObjectURL(blob);
     set((s) => ({ fileUrls: { ...s.fileUrls, [id]: url }, transferring: false }));
     updateMessage(id, { status: 'completed', progress: 100, completedAt: Date.now() }, true);
+  };
+
+  /** Interrupted incoming transfer: stash the bytes so a retry can resume. */
+  const stashPartialReceive = (): void => {
+    if (!activeReceive) return;
+    if (activeReceive.assembler.received > 0) {
+      partialReceives.set(activeReceive.id, activeReceive.assembler);
+    }
+    activeReceive = null;
   };
 
   /** An outgoing file that hasn't reached a terminal state yet? */
@@ -181,7 +197,12 @@ export const useSessionStore = create<SessionState>((set, get) => {
   };
 
   /** Sender pump: reads the file chunk by chunk with backpressure. */
-  const runSend = async (id: string, file: File, myEpoch: number): Promise<void> => {
+  const runSend = async (
+    id: string,
+    file: File,
+    myEpoch: number,
+    startOffset = 0,
+  ): Promise<void> => {
     const result = await pumpFile(
       file,
       (chunk) => (peer ? peer.sendWithBackpressure(chunk) : Promise.resolve(false)),
@@ -191,6 +212,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
         if (findMessage(id)?.progress !== pct) updateMessage(id, { progress: pct });
       },
       () => cancelledSends.has(id) || epoch !== myEpoch,
+      startOffset,
     );
     if (epoch !== myEpoch) return;
     set({ transferring: false });
@@ -273,9 +295,14 @@ export const useSessionStore = create<SessionState>((set, get) => {
         const file = outgoingFiles.get(frame.id);
         if (!file || get().transferring) break;
         cancelledSends.delete(frame.id);
+        // Resume from the receiver's partial copy when it has one.
+        const offset =
+          frame.offset && frame.offset > 0 && frame.offset < file.size ? frame.offset : 0;
+        const startPct = Math.round((offset / Math.max(1, file.size)) * 100);
         set({ transferring: true });
-        updateMessage(frame.id, { status: 'transferring', progress: 0 }, true);
-        void runSend(frame.id, file, myEpoch);
+        updateMessage(frame.id, { status: 'transferring', progress: startPct }, true);
+        if (offset > 0) pushSystemMessage(`Resuming transfer from ${startPct}%`);
+        void runSend(frame.id, file, myEpoch, offset);
         break;
       }
 
@@ -295,9 +322,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
         if (message && (message.status === 'pending' || message.direction === 'received')) {
           updateMessage(frame.id, { status: 'cancelled' }, true);
         }
-        // Receiver side: drop the partial transfer.
+        // Receiver side: keep the partial bytes for a future resume.
         if (activeReceive?.id === frame.id) {
-          activeReceive = null;
+          stashPartialReceive();
           set({ transferring: false });
         }
         offerNextQueued();
@@ -336,6 +363,17 @@ export const useSessionStore = create<SessionState>((set, get) => {
         },
         onClose: () => {
           if (epoch !== myEpoch) return;
+          // Fail anything mid-flight; keep received bytes for a resume.
+          if (activeReceive) {
+            const receiveId = activeReceive.id;
+            stashPartialReceive();
+            updateMessage(
+              receiveId,
+              { status: 'failed', error: 'Connection lost during transfer.' },
+              true,
+            );
+            set({ transferring: false });
+          }
           if (get().status === 'connected') {
             set({ status: 'disconnected' });
             pushSystemMessage('Connection closed');
@@ -412,6 +450,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     cancelledSends.clear();
     activeReceive = null;
     sendQueue.length = 0;
+    partialReceives.clear();
     for (const url of Object.values(get().fileUrls)) URL.revokeObjectURL(url);
   };
 
@@ -505,7 +544,16 @@ export const useSessionStore = create<SessionState>((set, get) => {
     acceptFile(messageId: string) {
       const message = findMessage(messageId);
       if (!message?.file || message.status !== 'pending' || get().transferring) return;
-      if (!sendFrame({ v: 1, type: 'file-accept', id: messageId })) return;
+
+      // Resume from a stashed partial when the retried offer matches it.
+      const partial = partialReceives.get(messageId);
+      const resumable =
+        partial && partial.meta.size === message.file.size && !partial.done
+          ? partial
+          : undefined;
+      const offset = resumable?.received ?? 0;
+
+      if (!sendFrame({ v: 1, type: 'file-accept', id: messageId, offset })) return;
 
       if (message.file.size === 0) {
         // Nothing will arrive for an empty file — complete immediately.
@@ -513,9 +561,14 @@ export const useSessionStore = create<SessionState>((set, get) => {
         finishReceive(messageId, new Blob([], { type: message.file.mimeType }));
         return;
       }
-      activeReceive = { id: messageId, assembler: new ChunkAssembler(message.file) };
+      activeReceive = {
+        id: messageId,
+        assembler: resumable ?? new ChunkAssembler(message.file),
+      };
+      const startPct = Math.round((offset / Math.max(1, message.file.size)) * 100);
       set({ transferring: true });
-      updateMessage(messageId, { status: 'transferring' }, true);
+      updateMessage(messageId, { status: 'transferring', progress: startPct }, true);
+      if (offset > 0) pushSystemMessage(`Resuming transfer from ${startPct}%`);
     },
 
     rejectFile(messageId: string) {
@@ -539,7 +592,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           offerNextQueued();
         }
       } else {
-        if (activeReceive?.id === messageId) activeReceive = null;
+        if (activeReceive?.id === messageId) stashPartialReceive();
         set({ transferring: false });
         updateMessage(messageId, { status: 'cancelled' }, true);
       }

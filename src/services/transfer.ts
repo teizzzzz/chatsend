@@ -26,15 +26,17 @@ export type PumpResult = 'completed' | 'cancelled' | 'failed';
 /**
  * Read `file` slice by slice and push each chunk through `send` (which is
  * expected to apply backpressure). Reports cumulative bytes after each chunk
- * so the caller can render a percentage.
+ * so the caller can render a percentage. `startOffset` resumes an
+ * interrupted transfer from the bytes the receiver already holds.
  */
 export async function pumpFile(
   file: File,
   send: (chunk: ArrayBuffer) => Promise<boolean>,
   onProgress: (sentBytes: number) => void,
   isCancelled: () => boolean,
+  startOffset = 0,
 ): Promise<PumpResult> {
-  for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
+  for (let offset = startOffset; offset < file.size; offset += CHUNK_SIZE) {
     if (isCancelled()) return 'cancelled';
     let chunk: ArrayBuffer;
     try {
