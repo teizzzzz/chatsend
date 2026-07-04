@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Card } from '@/components/ui/Card';
-import { cn } from '@/lib/utils';
+import { cn, dayKeyOf } from '@/lib/utils';
 import type { Message } from '@/types';
 
 /**
@@ -8,14 +8,6 @@ import type { Message } from '@/types';
  * records show a count badge; clicking a day filters the record list below
  * (clicking it again clears the filter). Pure date math, no dependency.
  */
-
-/** Local-timezone day key, e.g. "2026-07-04". */
-export function dayKeyOf(epochMs: number): string {
-  const d = new Date(epochMs);
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 

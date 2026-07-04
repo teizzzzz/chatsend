@@ -42,6 +42,14 @@ export function formatTime(epochMs: number): string {
   });
 }
 
+/** Local-timezone day key, e.g. "2026-07-04". Used by the calendar view. */
+export function dayKeyOf(epochMs: number): string {
+  const d = new Date(epochMs);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 /** Date + time for history rows. */
 export function formatDateTime(epochMs: number): string {
   return new Date(epochMs).toLocaleString([], {
