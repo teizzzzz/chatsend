@@ -419,6 +419,17 @@ export const useSessionStore = create<SessionState>((set, get) => {
     void peer.start();
   };
 
+  /** Refuse to pair with a blocked device (req §6.2: 设备黑名单). */
+  const rejectIfBlocked = (device: Device): boolean => {
+    if (!useAppStore.getState().blockedDevices[device.id]) return false;
+    teardownServices();
+    set({
+      status: 'failed',
+      error: `"${device.name}" is blocked. Unblock it in Settings to connect.`,
+    });
+    return true;
+  };
+
   const openSignaling = (myEpoch: number): Promise<void> => {
     signaling = new SignalingClient({
       onRoomCreated: (code) => {
@@ -426,11 +437,13 @@ export const useSessionStore = create<SessionState>((set, get) => {
       },
       onRoomJoined: (hostDevice) => {
         if (epoch !== myEpoch) return;
+        if (rejectIfBlocked(hostDevice)) return;
         set({ peer: hostDevice, status: 'negotiating' });
         startPeer(false, myEpoch);
       },
       onPeerJoined: (guestDevice) => {
         if (epoch !== myEpoch) return;
+        if (rejectIfBlocked(guestDevice)) return;
         set({ peer: guestDevice, status: 'negotiating' });
         startPeer(true, myEpoch);
       },

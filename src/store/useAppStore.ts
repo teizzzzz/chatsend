@@ -29,6 +29,11 @@ interface AppState {
    * empty means same-origin /ws (the web default).
    */
   serverUrl: string;
+  /**
+   * Blocked devices (req §6.2 第二阶段: 设备黑名单): hidden from the nearby
+   * list, their invitations are ignored, and pairing with them is refused.
+   */
+  blockedDevices: Record<string, { name: string; blockedAt: number }>;
 
   setDeviceName: (name: string) => void;
   setTheme: (theme: ThemeMode) => void;
@@ -36,6 +41,8 @@ interface AppState {
   trustDevice: (id: string, name: string) => void;
   untrustDevice: (id: string) => void;
   setServerUrl: (url: string) => void;
+  blockDevice: (id: string, name: string) => void;
+  unblockDevice: (id: string) => void;
 }
 
 /** A friendly default device name so first-run isn't blank. */
@@ -55,6 +62,7 @@ export const useAppStore = create<AppState>()(
       saveHistory: true,
       trustedDevices: {},
       serverUrl: '',
+      blockedDevices: {},
 
       setDeviceName: (name) => set({ deviceName: name.trim() || defaultDeviceName() }),
       setTheme: (theme) => set({ theme }),
@@ -70,6 +78,22 @@ export const useAppStore = create<AppState>()(
           return { trustedDevices: rest };
         }),
       setServerUrl: (url) => set({ serverUrl: url.trim() }),
+      blockDevice: (id, name) =>
+        set((s) => {
+          // Blocking implies revoking trust.
+          const trusted = { ...s.trustedDevices };
+          delete trusted[id];
+          return {
+            trustedDevices: trusted,
+            blockedDevices: { ...s.blockedDevices, [id]: { name, blockedAt: Date.now() } },
+          };
+        }),
+      unblockDevice: (id) =>
+        set((s) => {
+          const rest = { ...s.blockedDevices };
+          delete rest[id];
+          return { blockedDevices: rest };
+        }),
     }),
     {
       name: 'chatsend.settings',

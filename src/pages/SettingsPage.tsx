@@ -52,6 +52,8 @@ export function SettingsPage() {
     setSaveHistory,
     trustedDevices,
     untrustDevice,
+    blockedDevices,
+    unblockDevice,
     serverUrl,
     setServerUrl,
   } = useAppStore();
@@ -135,6 +137,28 @@ export function SettingsPage() {
                   </span>
                   <Button variant="secondary" size="sm" onClick={() => untrustDevice(id)}>
                     Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section
+          title="Blocked devices"
+          description="Blocked devices are hidden from the nearby list and cannot connect. Block a device from its invitation banner."
+        >
+          {Object.keys(blockedDevices).length === 0 ? (
+            <p className="text-sm text-slate-400">No blocked devices.</p>
+          ) : (
+            <ul className="space-y-2">
+              {Object.entries(blockedDevices).map(([id, info]) => (
+                <li key={id} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm text-slate-700 dark:text-slate-300">
+                    {info.name}
+                  </span>
+                  <Button variant="secondary" size="sm" onClick={() => unblockDevice(id)}>
+                    Unblock
                   </Button>
                 </li>
               ))}

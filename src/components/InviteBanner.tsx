@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { usePresenceStore } from '@/store/usePresenceStore';
+import { useAppStore } from '@/store/useAppStore';
 
 /**
  * Floating banner shown on any page when a nearby device sends a connect
@@ -10,12 +11,18 @@ import { usePresenceStore } from '@/store/usePresenceStore';
 export function InviteBanner() {
   const navigate = useNavigate();
   const { invite, clearInvite } = usePresenceStore();
+  const blockDevice = useAppStore((s) => s.blockDevice);
   if (!invite) return null;
 
   const accept = () => {
     const { code } = invite;
     clearInvite();
     navigate(`/connect?mode=join&code=${code}`);
+  };
+
+  const block = () => {
+    blockDevice(invite.device.id, invite.device.name);
+    clearInvite();
   };
 
   return (
@@ -29,6 +36,9 @@ export function InviteBanner() {
         </Button>
         <Button size="sm" variant="ghost" onClick={clearInvite}>
           Dismiss
+        </Button>
+        <Button size="sm" variant="ghost" onClick={block} title="Ignore this device permanently">
+          Block
         </Button>
       </div>
     </div>

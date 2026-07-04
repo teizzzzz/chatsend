@@ -22,6 +22,8 @@ interface PresenceState {
 }
 
 let client: PresenceClient | null = null;
+/** Unfiltered list from the server; the store exposes it minus blocked. */
+let rawNearby: Device[] = [];
 
 function localDevice(): Device {
   const { deviceId, deviceName } = useAppStore.getState();
@@ -40,14 +42,30 @@ export const usePresenceStore = create<PresenceState>((set) => ({
 
   init() {
     if (client) return;
+    const applyBlocklist = () => {
+      const blocked = useAppStore.getState().blockedDevices;
+      set((s) => ({
+        nearby: rawNearby.filter((d) => !blocked[d.id]),
+        // Blocking also dismisses that device's pending invitation.
+        invite: s.invite && blocked[s.invite.device.id] ? null : s.invite,
+      }));
+    };
     client = new PresenceClient(defaultSignalingUrl(), localDevice, {
-      onNearby: (devices) => set({ nearby: devices }),
-      onInvite: (device, code) => set({ invite: { device, code } }),
+      onNearby: (devices) => {
+        rawNearby = devices;
+        applyBlocklist();
+      },
+      onInvite: (device, code) => {
+        // Invitations from blocked devices are dropped silently.
+        if (useAppStore.getState().blockedDevices[device.id]) return;
+        set({ invite: { device, code } });
+      },
     });
     client.start();
-    // Keep the advertised name current after a rename in Settings.
     useAppStore.subscribe((state, prev) => {
+      // Keep the advertised name current after a rename in Settings.
       if (state.deviceName !== prev.deviceName) client?.announce();
+      if (state.blockedDevices !== prev.blockedDevices) applyBlocklist();
     });
   },
 
