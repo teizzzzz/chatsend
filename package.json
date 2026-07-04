@@ -16,6 +16,8 @@
     "desktop:build": "tauri build"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",
     "fflate": "^0.8.3",
@@ -27,6 +29,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/qrcode": "^1.5.6",

@@ -36,26 +36,41 @@ npm run build && cd src-tauri && cargo build
 ```
 
 Cross-platform installers are built per-OS (a macOS `.dmg` needs a Mac, a
-Windows `.msi` needs Windows) — use a CI matrix (e.g.
-`tauri-apps/tauri-action`) for releases.
+Windows `.exe`/`.msi` needs Windows). The **Release builds** workflow
+(`.github/workflows/release.yml`) does this automatically on every `v*` tag:
+its matrix produces the Windows NSIS setup `.exe` + `.msi`, macOS `.dmg`,
+and Linux `.deb`/`.AppImage` as downloadable artifacts.
 
-## Mobile (documented path, not scaffolded)
+## Android (Capacitor) — scaffolded in `android/`
 
-The PWA already covers the doc's mobile MVP (§4: 手机浏览器 / PWA 安装模式).
-When store distribution becomes worth it, the low-risk path is Capacitor:
+The Capacitor Android project is committed (`capacitor.config.ts` +
+`android/`). Two ways to get an APK:
+
+### CI (no local setup)
+
+Push a tag (`git tag v0.10.0 && git push --tags`) or run the
+**Release builds** workflow manually — the `android` job builds
+`app-debug.apk` on a GitHub runner and uploads it as an artifact. The debug
+APK is signed with the auto-generated debug key and installs directly on any
+device that allows unknown sources.
+
+### Locally (Android Studio / SDK required)
 
 ```bash
-npm i -D @capacitor/cli @capacitor/core @capacitor/android @capacitor/ios
-npx cap init ChatSend app.chatsend.mobile --web-dir=dist
-npx cap add android && npx cap add ios
-npm run build && npx cap sync
-npx cap open android   # requires Android Studio / SDK
-npx cap open ios       # requires Xcode on macOS
+npm run build && npx cap sync android
+npx cap open android        # then Build ▸ Build APK(s) in Android Studio
+# or headless:
+cd android && ./gradlew assembleDebug
+# → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Same rule as desktop: set the server URL via `VITE_SIGNALING_URL` at build
-time or the in-app Settings → Server field. WebRTC works in both WebViews;
-iOS still limits background transfers (doc §4 技术边界).
+For a **Play Store release**: generate a keystore
+(`keytool -genkey -v -keystore chatsend.keystore …`), configure
+`signingConfigs` in `android/app/build.gradle`, and run
+`./gradlew assembleRelease` (or `bundleRelease` for an .aab).
 
-Tauri v2 also supports iOS/Android targets if a single toolchain across
-desktop + mobile is preferred later.
+Same rule as desktop: set the server URL via `VITE_SIGNALING_URL` at build
+time (CI reads the `CHATSEND_SERVER_URL` repo variable) or the in-app
+Settings → Server field. WebRTC works in the Android WebView; iOS (add via
+`npx cap add ios`, requires Xcode) still limits background transfers
+(doc §4 技术边界).
