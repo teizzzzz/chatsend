@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/useAppStore';
+import { clearAllMessages } from '@/services/db';
 import type { ThemeMode } from '@/types';
 
 /**
@@ -42,9 +43,16 @@ function Section({
 }
 
 export function SettingsPage() {
-  const { deviceName, setDeviceName, theme, setTheme } = useAppStore();
+  const { deviceName, setDeviceName, theme, setTheme, saveHistory, setSaveHistory } =
+    useAppStore();
   const [nameDraft, setNameDraft] = useState(deviceName);
   const saved = nameDraft.trim() === deviceName;
+
+  const handleClearHistory = () => {
+    if (window.confirm('Delete all transfer history? This cannot be undone.')) {
+      void clearAllMessages();
+    }
+  };
 
   return (
     <Layout>
@@ -88,16 +96,36 @@ export function SettingsPage() {
           title="Data"
           description="History is stored only on this device."
         >
-          <Button
-            variant="danger"
-            onClick={() => alert('Clearing history is implemented in a later phase.')}
-          >
-            Clear all history
-          </Button>
+          <div className="space-y-3">
+            <label className="flex cursor-pointer items-center justify-between">
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                Save transfer history
+              </span>
+              <button
+                role="switch"
+                aria-checked={saveHistory}
+                onClick={() => setSaveHistory(!saveHistory)}
+                className={cn(
+                  'relative h-6 w-11 rounded-full transition-colors',
+                  saveHistory ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                    saveHistory ? 'translate-x-[22px]' : 'translate-x-0.5',
+                  )}
+                />
+              </button>
+            </label>
+            <Button variant="danger" onClick={handleClearHistory}>
+              Clear all history
+            </Button>
+          </div>
         </Section>
 
         <p className="pt-2 text-center text-xs text-slate-400">
-          ChatSend v0.2.0 · Phase 1
+          ChatSend v0.3.0 · Phase 2
         </p>
       </div>
     </Layout>

@@ -16,9 +16,12 @@ interface AppState {
   deviceName: string;
   /** Selected theme mode. */
   theme: ThemeMode;
+  /** When off, transfers still work but nothing is written to history. */
+  saveHistory: boolean;
 
   setDeviceName: (name: string) => void;
   setTheme: (theme: ThemeMode) => void;
+  setSaveHistory: (on: boolean) => void;
 }
 
 /** A friendly default device name so first-run isn't blank. */
@@ -35,9 +38,11 @@ export const useAppStore = create<AppState>()(
       deviceId: createId('dev_'),
       deviceName: defaultDeviceName(),
       theme: 'system',
+      saveHistory: true,
 
       setDeviceName: (name) => set({ deviceName: name.trim() || defaultDeviceName() }),
       setTheme: (theme) => set({ theme }),
+      setSaveHistory: (on) => set({ saveHistory: on }),
     }),
     {
       name: 'chatsend.settings',

@@ -1,77 +1,20 @@
 import { useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { Layout } from '@/components/Layout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { SearchIcon, TrashIcon } from '@/components/ui/icons';
 import { cn, formatBytes, formatDateTime } from '@/lib/utils';
+import { db, deleteMessage, clearAllMessages } from '@/services/db';
 import type { Message } from '@/types';
 
 /**
- * Transfer history. Shows text + file records with search, per-row delete, and
- * clear-all. Phase 0 renders sample records from local state; a later phase
- * backs this with IndexedDB (Dexie) queries. The filtering/rendering logic
- * here is written against the `Message` type so swapping the data source is a
- * drop-in change.
+ * Transfer history, backed by IndexedDB. `useLiveQuery` keeps the list in
+ * sync with writes from anywhere in the app (new messages, deletes, clear),
+ * so mutations here just call the db service. Search filters in memory —
+ * fine at MVP history sizes.
  */
-
-const SAMPLE: Message[] = [
-  {
-    id: 'h1',
-    sessionId: 's1',
-    type: 'file',
-    direction: 'sent',
-    senderDeviceId: 'me',
-    receiverDeviceId: 'peer1',
-    file: {
-      name: 'vacation.zip',
-      size: 24_500_000,
-      mimeType: 'application/zip',
-      extension: 'zip',
-      chunkSize: 65_536,
-      totalChunks: 374,
-    },
-    status: 'completed',
-    progress: 100,
-    peerDeviceName: "Alex's Laptop",
-    createdAt: Date.now() - 1000 * 60 * 60 * 3,
-    completedAt: Date.now() - 1000 * 60 * 60 * 3 + 42_000,
-  },
-  {
-    id: 'h2',
-    sessionId: 's1',
-    type: 'text',
-    direction: 'received',
-    senderDeviceId: 'peer1',
-    receiverDeviceId: 'me',
-    content: 'Thanks, got the files!',
-    status: 'completed',
-    progress: 100,
-    peerDeviceName: "Alex's Laptop",
-    createdAt: Date.now() - 1000 * 60 * 60 * 3 + 5000,
-  },
-  {
-    id: 'h3',
-    sessionId: 's2',
-    type: 'file',
-    direction: 'received',
-    senderDeviceId: 'peer2',
-    receiverDeviceId: 'me',
-    file: {
-      name: 'slides.pdf',
-      size: 3_200_000,
-      mimeType: 'application/pdf',
-      extension: 'pdf',
-      chunkSize: 65_536,
-      totalChunks: 49,
-    },
-    status: 'completed',
-    progress: 100,
-    peerDeviceName: 'Meeting Room PC',
-    createdAt: Date.now() - 1000 * 60 * 60 * 26,
-    completedAt: Date.now() - 1000 * 60 * 60 * 26 + 8000,
-  },
-];
 
 function DirectionBadge({ direction }: { direction: Message['direction'] }) {
   const incoming = direction === 'received';
@@ -103,13 +46,14 @@ function HistoryRow({
           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
             {message.type === 'file' ? message.file?.name : message.content}
           </p>
-          <DirectionBadge direction={message.direction} />
+          {message.type !== 'system' && <DirectionBadge direction={message.direction} />}
         </div>
         <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
           {message.type === 'file' && message.file
             ? `${formatBytes(message.file.size)} · `
             : ''}
-          {message.peerDeviceName} · {formatDateTime(message.createdAt)}
+          {message.peerDeviceName ? `${message.peerDeviceName} · ` : ''}
+          {formatDateTime(message.createdAt)}
         </p>
       </div>
       <button
@@ -124,10 +68,15 @@ function HistoryRow({
 }
 
 export function HistoryPage() {
-  const [records, setRecords] = useState<Message[]>(SAMPLE);
   const [query, setQuery] = useState('');
 
+  const records = useLiveQuery(
+    () => db.messages.orderBy('createdAt').reverse().toArray(),
+    [],
+  );
+
   const filtered = useMemo(() => {
+    if (!records) return [];
     const q = query.trim().toLowerCase();
     if (!q) return records;
     return records.filter((r) => {
@@ -139,9 +88,11 @@ export function HistoryPage() {
     });
   }, [records, query]);
 
-  const handleDelete = (id: string) =>
-    setRecords((prev) => prev.filter((r) => r.id !== id));
-  const handleClearAll = () => setRecords([]);
+  const handleClearAll = () => {
+    if (window.confirm('Delete all transfer history? This cannot be undone.')) {
+      void clearAllMessages();
+    }
+  };
 
   return (
     <Layout>
@@ -160,20 +111,24 @@ export function HistoryPage() {
             variant="danger"
             size="md"
             onClick={handleClearAll}
-            disabled={records.length === 0}
+            disabled={!records || records.length === 0}
           >
             Clear
           </Button>
         </div>
 
-        {filtered.length === 0 ? (
+        {records && filtered.length === 0 ? (
           <p className="py-16 text-center text-sm text-slate-400">
             {records.length === 0 ? 'No history yet.' : 'No matching records.'}
           </p>
         ) : (
           <div className="space-y-2">
             {filtered.map((r) => (
-              <HistoryRow key={r.id} message={r} onDelete={handleDelete} />
+              <HistoryRow
+                key={r.id}
+                message={r}
+                onDelete={(id) => void deleteMessage(id)}
+              />
             ))}
           </div>
         )}

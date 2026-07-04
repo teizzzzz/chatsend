@@ -4,6 +4,34 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.3.0] — Phase 2: Text messages + local history
+
+Paired devices now exchange real text messages over the DataChannel, and
+every message is persisted locally. Verified end-to-end with an automated
+two-browser test (send/reply both directions, URL linkification, bubble
+direction styling, history surviving reload, search, delete, clear-all).
+
+### Added
+
+- **DataChannel frame protocol** (`src/types/channel.ts`): versioned JSON
+  frames with a validating `parseFrame` (length-capped); file control/binary
+  frames will extend the same union in Phase 3.
+- **Persistence layer** (`src/services/db.ts`): Dexie/IndexedDB `messages`
+  table (indexed by createdAt/sessionId) with save / delete / clear-all.
+  History never leaves the device (req §6.1).
+- **`sendText` + receive handling** in the session store: sender and
+  receiver both write the message to the timeline and to IndexedDB; the
+  sender's message id is reused on the receiving side.
+- **Chat bubbles**: sent right (brand), received left, system chips
+  centered; per-message copy button (req §5.4/§5.3); URLs auto-linked via
+  `src/lib/linkify.tsx`; auto-scroll to the newest message; composer enabled
+  while connected.
+- **History page on live data**: `dexie-react-hooks` `useLiveQuery` keeps
+  the list in sync; search, single-record delete, and confirm-guarded
+  clear-all now operate on IndexedDB.
+- **Settings**: "Save transfer history" toggle (req §7.5) and a working
+  confirm-guarded "Clear all history".
+
 ## [0.2.0] — Phase 1: Pairing system
 
 Two devices can now actually connect: create a room, share the 6-character

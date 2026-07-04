@@ -12,9 +12,10 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-🚧 **Phase 1 — Pairing works.** Two browsers can pair with a 6-character code
-and establish a direct WebRTC DataChannel via the bundled signalling server.
-Text messaging over the wire is next (Phase 2); file transfer follows.
+🚧 **Phase 2 — Text messaging works.** Paired devices exchange text messages
+over the WebRTC DataChannel (URLs auto-link, messages are copyable), and every
+message is persisted to IndexedDB — the history page survives reloads with
+search, delete, and clear-all. File transfer is next (Phase 3).
 
 ## Tech stack
 
@@ -24,7 +25,7 @@ Text messaging over the wire is next (Phase 2); file transfer follows.
 | Build tool         | Vite                            |
 | Styling            | Tailwind CSS (class dark mode)  |
 | State              | Zustand (persisted settings)    |
-| Local database     | IndexedDB via Dexie.js *(later)*|
+| Local database     | IndexedDB via Dexie.js          |
 | Signalling         | Node.js + `ws` WebSocket server |
 | Transport          | WebRTC DataChannel              |
 
@@ -64,7 +65,8 @@ src/
 ├── index.css             # Tailwind layers + base styles
 ├── types/                # Core domain types (single source of truth)
 │   ├── index.ts          #   Device, TransferSession, Message, FileMeta …
-│   └── signaling.ts      #   client<->server wire protocol + signal payloads
+│   ├── signaling.ts      #   client<->server wire protocol + signal payloads
+│   └── channel.ts        #   DataChannel frame protocol (text now, files next)
 ├── pages/                # One component per screen (routed)
 │   ├── HomePage.tsx      #   create / join / history / settings entry points
 │   ├── ConnectPage.tsx   #   create room (show code) or join by code
@@ -79,10 +81,12 @@ src/
 │   └── useSessionStore.ts#   live pairing state, orchestrates the services
 ├── lib/                  # Framework-agnostic helpers
 │   ├── utils.ts          #   ids, codes, byte/time formatting, cn()
+│   ├── linkify.tsx       #   URL auto-linking for message text
 │   └── useTheme.ts       #   applies light/dark/system to <html>
 └── services/             # Connection & transport layer (React-free)
     ├── signaling.ts      #   WebSocket client for the signalling server
-    └── peer.ts           #   RTCPeerConnection + DataChannel wrapper
+    ├── peer.ts           #   RTCPeerConnection + DataChannel wrapper
+    └── db.ts             #   Dexie/IndexedDB schema + history queries
 ```
 
 ### Design principles
@@ -111,7 +115,8 @@ The four core entities (defined in `src/types/index.ts`):
 - [x] **Phase 0** — Project scaffolding, routes, screens, UI system, types.
 - [x] **Phase 1** — Pairing: signalling server, room create/join by code,
       WebRTC DataChannel establishment, live connection status.
-- [ ] **Phase 2** — Text messages over the DataChannel + IndexedDB history.
+- [x] **Phase 2** — Text messages over the DataChannel (linkified, copyable) +
+      IndexedDB history with search / delete / clear and a save-history toggle.
 - [ ] **Phase 3** — Chunked file transfer with accept/reject + progress.
 - [ ] **Phase 4** — History page backed by real data: search, filter, delete.
 - [ ] **Phase 5** — Polish: drag & drop, multi-file queue, mobile fit & finish.

@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { Device, Message } from '@/types';
+import { parseFrame, type ChannelFrame } from '@/types/channel';
 import { SignalingClient } from '@/services/signaling';
 import { PeerSession } from '@/services/peer';
+import { saveMessage } from '@/services/db';
 import { useAppStore } from '@/store/useAppStore';
 import { createId } from '@/lib/utils';
 
@@ -39,6 +41,8 @@ interface SessionState {
 
   createRoom: () => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
+  /** Send a text message over the DataChannel. False if not connected. */
+  sendText: (content: string) => boolean;
   /** Tear down any connection/attempt and reset to idle. */
   leave: () => void;
 }
@@ -74,9 +78,15 @@ function teardownServices(): void {
 }
 
 export const useSessionStore = create<SessionState>((set, get) => {
+  /** Append to the timeline and persist (unless history saving is off). */
+  const pushMessage = (message: Message): void => {
+    set((s) => ({ messages: [...s.messages, message] }));
+    if (useAppStore.getState().saveHistory) void saveMessage(message);
+  };
+
   const pushSystemMessage = (content: string): void => {
     const { sessionId, peer: peerDevice } = get();
-    const message: Message = {
+    pushMessage({
       id: createId('msg_'),
       sessionId: sessionId ?? 'none',
       type: 'system',
@@ -88,8 +98,30 @@ export const useSessionStore = create<SessionState>((set, get) => {
       progress: 100,
       createdAt: Date.now(),
       peerDeviceName: peerDevice?.name,
-    };
-    set((s) => ({ messages: [...s.messages, message] }));
+    });
+  };
+
+  const handleFrame = (frame: ChannelFrame): void => {
+    switch (frame.type) {
+      case 'text': {
+        const { sessionId, peer: peerDevice } = get();
+        pushMessage({
+          // Reuse the sender's id so both sides address the same message.
+          id: frame.id || createId('msg_'),
+          sessionId: sessionId ?? 'none',
+          type: 'text',
+          direction: 'received',
+          senderDeviceId: peerDevice?.id ?? 'unknown',
+          receiverDeviceId: localDevice().id,
+          content: frame.content,
+          status: 'completed',
+          progress: 100,
+          createdAt: Date.now(),
+          peerDeviceName: peerDevice?.name,
+        });
+        break;
+      }
+    }
   };
 
   /** Both peers are in the room — run the WebRTC handshake. */
@@ -124,8 +156,11 @@ export const useSessionStore = create<SessionState>((set, get) => {
             if (wasConnected) pushSystemMessage('Connection lost');
           }
         },
-        onMessage: () => {
-          // Phase 2: text messages over the DataChannel land here.
+        onMessage: (data) => {
+          if (epoch !== myEpoch) return;
+          if (typeof data !== 'string') return; // binary chunks: Phase 3
+          const frame = parseFrame(data);
+          if (frame) handleFrame(frame);
         },
       },
     );
@@ -219,6 +254,31 @@ export const useSessionStore = create<SessionState>((set, get) => {
           set({ status: 'failed', error: (err as Error).message });
         }
       }
+    },
+
+    sendText(content: string) {
+      const { status, sessionId, peer: peerDevice } = get();
+      const text = content.trim();
+      if (!text || status !== 'connected' || !peer) return false;
+
+      const id = createId('msg_');
+      const frame: ChannelFrame = { v: 1, type: 'text', id, content: text, sentAt: Date.now() };
+      if (!peer.send(JSON.stringify(frame))) return false;
+
+      pushMessage({
+        id,
+        sessionId: sessionId ?? 'none',
+        type: 'text',
+        direction: 'sent',
+        senderDeviceId: localDevice().id,
+        receiverDeviceId: peerDevice?.id ?? 'unknown',
+        content: text,
+        status: 'completed',
+        progress: 100,
+        createdAt: Date.now(),
+        peerDeviceName: peerDevice?.name,
+      });
+      return true;
     },
 
     leave() {

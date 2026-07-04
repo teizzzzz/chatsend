@@ -1,17 +1,25 @@
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { BackIcon, PaperclipIcon, SendIcon } from '@/components/ui/icons';
+import {
+  BackIcon,
+  CheckIcon,
+  CopyIcon,
+  PaperclipIcon,
+  SendIcon,
+} from '@/components/ui/icons';
 import { cn, formatTime } from '@/lib/utils';
+import { linkify } from '@/lib/linkify';
 import type { Message } from '@/types';
 import { useSessionStore, type SessionStatus } from '@/store/useSessionStore';
 
 /**
  * The chat-style transfer surface. Header shows the live peer name and
- * connection status from the session store; the timeline renders the
- * session's messages (system events only in Phase 1 — text lands in Phase 2,
- * so the composer is present but disabled).
+ * connection status; the timeline renders this session's messages (sent
+ * right, received left, system events centered); the composer sends text
+ * over the DataChannel. File messages arrive in Phase 3.
  */
 
 const STATUS_LABEL: Record<SessionStatus, string> = {
@@ -42,10 +50,69 @@ function SystemChip({ message }: { message: Message }) {
   );
 }
 
+function TextBubble({ message }: { message: Message }) {
+  const sent = message.direction === 'sent';
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content ?? '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable (permissions / non-secure context) — ignore.
+    }
+  };
+
+  return (
+    <div className={cn('flex', sent ? 'justify-end' : 'justify-start')}>
+      <div
+        className={cn(
+          'max-w-[78%] rounded-2xl px-3.5 py-2 text-sm shadow-sm',
+          sent
+            ? 'rounded-br-md bg-brand-600 text-white'
+            : 'rounded-bl-md bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100',
+        )}
+      >
+        <p className="whitespace-pre-wrap break-words">
+          {linkify(message.content ?? '')}
+        </p>
+        <div
+          className={cn(
+            'mt-1 flex items-center justify-end gap-2 text-[10px]',
+            sent ? 'text-brand-100' : 'text-slate-400',
+          )}
+        >
+          <button
+            onClick={copy}
+            className="opacity-60 transition-opacity hover:opacity-100"
+            aria-label="Copy message"
+            title="Copy"
+          >
+            {copied ? <CheckIcon className="text-xs" /> : <CopyIcon className="text-xs" />}
+          </button>
+          <span>{formatTime(message.createdAt)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ChatPage() {
   const navigate = useNavigate();
-  const { status, peer, messages, leave } = useSessionStore();
+  const { status, peer, messages, sendText, leave } = useSessionStore();
+  const [draft, setDraft] = useState('');
+  const listRef = useRef<HTMLDivElement>(null);
   const connected = status === 'connected';
+
+  // Keep the newest message in view.
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [messages.length]);
+
+  const handleSend = () => {
+    if (sendText(draft)) setDraft('');
+  };
 
   const handleLeave = () => {
     leave();
@@ -80,7 +147,7 @@ export function ChatPage() {
       </header>
 
       {/* Timeline */}
-      <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin p-4">
+      <div ref={listRef} className="flex-1 space-y-2 overflow-y-auto scrollbar-thin p-4">
         {status === 'idle' ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-slate-400">
@@ -91,11 +158,17 @@ export function ChatPage() {
             </Button>
           </div>
         ) : (
-          messages.map((m) => <SystemChip key={m.id} message={m} />)
+          messages.map((m) =>
+            m.type === 'system' ? (
+              <SystemChip key={m.id} message={m} />
+            ) : (
+              <TextBubble key={m.id} message={m} />
+            ),
+          )
         )}
       </div>
 
-      {/* Composer — enabled in Phase 2 (text over the DataChannel). */}
+      {/* Composer */}
       <div className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
         <button
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400"
@@ -106,10 +179,19 @@ export function ChatPage() {
           <PaperclipIcon className="text-xl" />
         </button>
         <Input
-          placeholder={connected ? 'Text messages arrive in Phase 2' : 'Not connected'}
-          disabled
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          placeholder={connected ? 'Type a message…' : 'Not connected'}
+          disabled={!connected}
         />
-        <Button size="md" className="w-10 shrink-0 px-0" aria-label="Send" disabled>
+        <Button
+          size="md"
+          className="w-10 shrink-0 px-0"
+          onClick={handleSend}
+          aria-label="Send"
+          disabled={!connected || !draft.trim()}
+        >
           <SendIcon className="text-lg" />
         </Button>
       </div>
