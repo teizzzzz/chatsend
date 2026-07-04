@@ -7,10 +7,12 @@ import {
   BackIcon,
   CheckIcon,
   CopyIcon,
+  DownloadIcon,
+  FileIcon,
   PaperclipIcon,
   SendIcon,
 } from '@/components/ui/icons';
-import { cn, formatTime } from '@/lib/utils';
+import { cn, formatBytes, formatTime } from '@/lib/utils';
 import { linkify } from '@/lib/linkify';
 import type { Message } from '@/types';
 import { useSessionStore, type SessionStatus } from '@/store/useSessionStore';
@@ -98,11 +100,181 @@ function TextBubble({ message }: { message: Message }) {
   );
 }
 
+/**
+ * File message bubble. Renders the offer / progress / result lifecycle:
+ * receiver gets Accept & Decline while pending and a Download link when
+ * complete; sender sees progress and can Cancel in flight or Retry after
+ * failure / rejection / cancellation (req §5.2).
+ */
+function FileBubble({ message }: { message: Message }) {
+  const sent = message.direction === 'sent';
+  const { transferring, fileUrls, acceptFile, rejectFile, cancelTransfer, retryFile } =
+    useSessionStore();
+  const file = message.file;
+  if (!file) return null;
+  const url = fileUrls[message.id];
+
+  return (
+    <div className={cn('flex', sent ? 'justify-end' : 'justify-start')}>
+      <div
+        className={cn(
+          'w-[78%] max-w-[78%] rounded-2xl px-3.5 py-3 text-sm shadow-sm',
+          sent
+            ? 'rounded-br-md bg-brand-600 text-white'
+            : 'rounded-bl-md bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100',
+        )}
+      >
+        {/* File identity */}
+        <div className="flex items-center gap-3">
+          <div
+            className={cn(
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg',
+              sent ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-700',
+            )}
+          >
+            <FileIcon />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate font-medium">{file.name}</p>
+            <p className={cn('text-xs', sent ? 'text-brand-100' : 'text-slate-400')}>
+              {formatBytes(file.size)}
+              {file.extension ? ` · ${file.extension.toUpperCase()}` : ''}
+            </p>
+          </div>
+        </div>
+
+        {/* Lifecycle-specific row */}
+        <div className="mt-2.5">
+          {message.status === 'pending' &&
+            (sent ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className={cn('text-xs', sent ? 'text-brand-100' : 'text-slate-400')}>
+                  Waiting for peer to accept…
+                </p>
+                <BubbleAction onClick={() => cancelTransfer(message.id)} sent={sent}>
+                  Cancel
+                </BubbleAction>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => acceptFile(message.id)}
+                  disabled={transferring}
+                >
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => rejectFile(message.id)}
+                >
+                  Decline
+                </Button>
+              </div>
+            ))}
+
+          {message.status === 'transferring' && (
+            <div className="space-y-1.5">
+              <div
+                className={cn(
+                  'h-1.5 w-full overflow-hidden rounded-full',
+                  sent ? 'bg-white/25' : 'bg-slate-200 dark:bg-slate-700',
+                )}
+              >
+                <div
+                  className={cn('h-full rounded-full transition-[width]', sent ? 'bg-white' : 'bg-brand-500')}
+                  style={{ width: `${message.progress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className={sent ? 'text-brand-100' : 'text-slate-400'}>
+                  {message.progress}%
+                </span>
+                <BubbleAction onClick={() => cancelTransfer(message.id)} sent={sent}>
+                  Cancel
+                </BubbleAction>
+              </div>
+            </div>
+          )}
+
+          {message.status === 'completed' &&
+            (sent ? (
+              <p className="text-xs text-brand-100">Sent ✓</p>
+            ) : url ? (
+              <a
+                href={url}
+                download={file.name}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 hover:underline dark:text-brand-400"
+              >
+                <DownloadIcon /> Download
+              </a>
+            ) : (
+              <p className="text-xs text-slate-400">Received</p>
+            ))}
+
+          {(message.status === 'rejected' ||
+            message.status === 'cancelled' ||
+            message.status === 'failed') && (
+            <div className="flex items-center justify-between gap-2">
+              <p className={cn('text-xs', sent ? 'text-brand-100' : 'text-slate-400')}>
+                {message.status === 'rejected'
+                  ? sent
+                    ? 'Declined by peer'
+                    : 'Declined'
+                  : message.status === 'cancelled'
+                    ? 'Cancelled'
+                    : (message.error ?? 'Transfer failed')}
+              </p>
+              {sent && (
+                <BubbleAction onClick={() => retryFile(message.id)} sent={sent}>
+                  Retry
+                </BubbleAction>
+              )}
+            </div>
+          )}
+        </div>
+
+        <p className={cn('mt-1.5 text-right text-[10px]', sent ? 'text-brand-100' : 'text-slate-400')}>
+          {formatTime(message.createdAt)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Small inline text action used inside bubbles (Cancel / Retry). */
+function BubbleAction({
+  onClick,
+  sent,
+  children,
+}: {
+  onClick: () => void;
+  sent: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'shrink-0 text-xs font-medium underline underline-offset-2',
+        sent ? 'text-white/90 hover:text-white' : 'text-brand-600 dark:text-brand-400',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function ChatPage() {
   const navigate = useNavigate();
-  const { status, peer, messages, sendText, leave } = useSessionStore();
+  const { status, peer, messages, transferring, sendText, sendFile, leave } =
+    useSessionStore();
   const [draft, setDraft] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const connected = status === 'connected';
 
   // Keep the newest message in view.
@@ -161,6 +333,8 @@ export function ChatPage() {
           messages.map((m) =>
             m.type === 'system' ? (
               <SystemChip key={m.id} message={m} />
+            ) : m.type === 'file' ? (
+              <FileBubble key={m.id} message={m} />
             ) : (
               <TextBubble key={m.id} message={m} />
             ),
@@ -170,11 +344,27 @@ export function ChatPage() {
 
       {/* Composer */}
       <div className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) sendFile(file);
+            e.target.value = ''; // allow re-picking the same file
+          }}
+        />
         <button
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400"
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+            connected && !transferring
+              ? 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              : 'text-slate-300 dark:text-slate-700',
+          )}
           aria-label="Attach file"
-          title="File sending arrives in Phase 3"
-          disabled
+          title={transferring ? 'A transfer is already in progress' : 'Send a file'}
+          disabled={!connected || transferring}
         >
           <PaperclipIcon className="text-xl" />
         </button>

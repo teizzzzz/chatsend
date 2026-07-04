@@ -19,6 +19,11 @@ const ICE_SERVERS: RTCIceServer[] = [
 /** Single ordered, reliable channel for both chat and file chunks. */
 const CHANNEL_LABEL = 'chatsend';
 
+/** Stop stuffing the channel buffer above this (backpressure kicks in). */
+const MAX_BUFFERED_BYTES = 1 << 20; // 1 MiB
+/** Resume sending once the buffer drains below this. */
+const BUFFERED_LOW_THRESHOLD = 256 * 1024;
+
 export interface PeerEvents {
   /** DataChannel is open — the pairing is usable. */
   onOpen: () => void;
@@ -98,6 +103,52 @@ export class PeerSession {
     return true;
   }
 
+  /**
+   * Send a binary chunk, waiting for the channel buffer to drain first if it
+   * is above the high-water mark. Keeps large file transfers from ballooning
+   * memory or stalling the channel. Returns false once the channel closes.
+   */
+  async sendWithBackpressure(data: ArrayBuffer): Promise<boolean> {
+    const channel = this.channel;
+    if (!channel || channel.readyState !== 'open') return false;
+    if (channel.bufferedAmount > MAX_BUFFERED_BYTES) {
+      const drained = await this.waitForDrain(channel);
+      if (!drained) return false;
+    }
+    if (channel.readyState !== 'open') return false;
+    try {
+      channel.send(data);
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  private waitForDrain(channel: RTCDataChannel): Promise<boolean> {
+    return new Promise((resolve) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        channel.removeEventListener('bufferedamountlow', onLow);
+        channel.removeEventListener('close', onClose);
+      };
+      const onLow = () => {
+        cleanup();
+        resolve(true);
+      };
+      const onClose = () => {
+        cleanup();
+        resolve(false);
+      };
+      // Safety valve: don't hang forever if the event never fires.
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve(channel.readyState === 'open');
+      }, 10_000);
+      channel.addEventListener('bufferedamountlow', onLow);
+      channel.addEventListener('close', onClose);
+    });
+  }
+
   close(): void {
     this.channel?.close();
     this.pc.close();
@@ -106,6 +157,7 @@ export class PeerSession {
   private attachChannel(channel: RTCDataChannel): void {
     this.channel = channel;
     channel.binaryType = 'arraybuffer';
+    channel.bufferedAmountLowThreshold = BUFFERED_LOW_THRESHOLD;
     channel.onopen = () => this.events.onOpen();
     channel.onclose = () => this.events.onClose();
     channel.onmessage = (event) => this.events.onMessage(event.data);

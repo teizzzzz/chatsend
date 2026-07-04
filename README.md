@@ -12,10 +12,11 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-🚧 **Phase 2 — Text messaging works.** Paired devices exchange text messages
-over the WebRTC DataChannel (URLs auto-link, messages are copyable), and every
-message is persisted to IndexedDB — the history page survives reloads with
-search, delete, and clear-all. File transfer is next (Phase 3).
+🚧 **Phase 3 — File transfer works.** Files travel peer-to-peer over the
+DataChannel in 64 KiB chunks with backpressure: the receiver must accept the
+offer first, both sides see live progress, either side can cancel, the sender
+can retry after a failure or rejection, and the receiver downloads the
+reassembled file. All transfers land in the local history.
 
 ## Tech stack
 
@@ -66,7 +67,8 @@ src/
 ├── types/                # Core domain types (single source of truth)
 │   ├── index.ts          #   Device, TransferSession, Message, FileMeta …
 │   ├── signaling.ts      #   client<->server wire protocol + signal payloads
-│   └── channel.ts        #   DataChannel frame protocol (text now, files next)
+│   └── channel.ts        #   DataChannel frames: text + file offer/accept/
+│                         #   reject/cancel controls (binary frames = chunks)
 ├── pages/                # One component per screen (routed)
 │   ├── HomePage.tsx      #   create / join / history / settings entry points
 │   ├── ConnectPage.tsx   #   create room (show code) or join by code
@@ -86,6 +88,8 @@ src/
 └── services/             # Connection & transport layer (React-free)
     ├── signaling.ts      #   WebSocket client for the signalling server
     ├── peer.ts           #   RTCPeerConnection + DataChannel wrapper
+    │                     #   (incl. backpressure-aware binary send)
+    ├── transfer.ts       #   file chunking / reassembly (64 KiB chunks)
     └── db.ts             #   Dexie/IndexedDB schema + history queries
 ```
 
@@ -117,8 +121,10 @@ The four core entities (defined in `src/types/index.ts`):
       WebRTC DataChannel establishment, live connection status.
 - [x] **Phase 2** — Text messages over the DataChannel (linkified, copyable) +
       IndexedDB history with search / delete / clear and a save-history toggle.
-- [ ] **Phase 3** — Chunked file transfer with accept/reject + progress.
-- [ ] **Phase 4** — History page backed by real data: search, filter, delete.
-- [ ] **Phase 5** — Polish: drag & drop, multi-file queue, mobile fit & finish.
+- [x] **Phase 3** — Chunked file transfer: offer → accept/decline, live
+      progress both sides, cancel, retry, download on completion.
+- [ ] **Phase 4** — History page filters (direction / file type / failed).
+- [ ] **Phase 5** — Polish: drag & drop, multi-file queue, QR-code join,
+      mobile fit & finish.
 
 See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each phase.

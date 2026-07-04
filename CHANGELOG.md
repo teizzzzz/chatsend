@@ -4,6 +4,39 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.4.0] — Phase 3: File transfer
+
+Files now move peer-to-peer. Verified end-to-end with an automated
+two-browser test: a 2 MB file transferred and SHA-256-verified byte-for-byte,
+reject propagation with a working retry, and file records persisting to
+history across reloads.
+
+### Added
+
+- **File control frames** (`src/types/channel.ts`): `file-offer` /
+  `file-accept` / `file-reject` / `file-cancel`, all validated in
+  `parseFrame`. File bytes travel as raw binary frames — the channel is
+  ordered+reliable and MVP allows one transfer at a time, so chunks need no
+  per-frame header.
+- **Transfer service** (`src/services/transfer.ts`): 64 KiB chunking with
+  `pumpFile` (progress + cancellation callbacks) and `ChunkAssembler`
+  (reassembles to a Blob). Pure logic, no React, no channel knowledge.
+- **Backpressure** (`src/services/peer.ts`): `sendWithBackpressure` waits on
+  `bufferedamountlow` above a 1 MiB high-water mark so large files don't
+  balloon memory or stall the channel (req §6.3: UI stays responsive).
+- **Store orchestration**: `sendFile` (offer), `acceptFile` / `rejectFile`
+  (receiver confirmation, req §5.2), `cancelTransfer` (either side, checked
+  between chunks), `retryFile` (re-offers with the same message id; the
+  receiver resets the existing bubble instead of duplicating). Received
+  files become object URLs (`fileUrls`) for download; empty files complete
+  immediately. Status transitions persist to IndexedDB; per-chunk progress
+  stays in memory.
+- **File bubbles** (ChatPage): file icon, name, size, type badge; Accept /
+  Decline buttons for the receiver; live progress bar + percentage with
+  Cancel during transfer; Download link on completion; Declined / Cancelled
+  / Failed states with Retry for the sender. Paperclip button wired to a
+  file picker, disabled while a transfer is active.
+
 ## [0.3.0] — Phase 2: Text messages + local history
 
 Paired devices now exchange real text messages over the DataChannel, and

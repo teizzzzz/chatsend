@@ -3,6 +3,7 @@ import type { Device, Message } from '@/types';
 import { parseFrame, type ChannelFrame } from '@/types/channel';
 import { SignalingClient } from '@/services/signaling';
 import { PeerSession } from '@/services/peer';
+import { ChunkAssembler, makeFileMeta, pumpFile } from '@/services/transfer';
 import { saveMessage } from '@/services/db';
 import { useAppStore } from '@/store/useAppStore';
 import { createId } from '@/lib/utils';
@@ -36,13 +37,27 @@ interface SessionState {
   error: string | null;
   /** Local session id; groups this pairing's messages. */
   sessionId: string | null;
-  /** Chat timeline. Phase 1 only produces system messages. */
+  /** Chat timeline: text, file, and system messages. */
   messages: Message[];
+  /** True while a file is being sent or received (one at a time in MVP). */
+  transferring: boolean;
+  /** Object URLs for received files, by message id. Session-lifetime only. */
+  fileUrls: Record<string, string>;
 
   createRoom: () => Promise<void>;
   joinRoom: (code: string) => Promise<void>;
   /** Send a text message over the DataChannel. False if not connected. */
   sendText: (content: string) => boolean;
+  /** Offer a file to the peer. Bytes flow only after they accept. */
+  sendFile: (file: File) => void;
+  /** Receiver: accept a pending file offer. */
+  acceptFile: (messageId: string) => void;
+  /** Receiver: decline a pending file offer. */
+  rejectFile: (messageId: string) => void;
+  /** Abort a pending or in-flight transfer (either side). */
+  cancelTransfer: (messageId: string) => void;
+  /** Sender: re-offer a failed / rejected / cancelled file. */
+  retryFile: (messageId: string) => void;
   /** Tear down any connection/attempt and reset to idle. */
   leave: () => void;
 }
@@ -50,6 +65,13 @@ interface SessionState {
 let signaling: SignalingClient | null = null;
 let peer: PeerSession | null = null;
 let epoch = 0;
+
+/** Sender keeps File handles for the active session (send + retry). */
+const outgoingFiles = new Map<string, File>();
+/** Send-loop cancellation flags, checked between chunks. */
+const cancelledSends = new Set<string>();
+/** The one in-flight incoming transfer (single transfer at a time in MVP). */
+let activeReceive: { id: string; assembler: ChunkAssembler } | null = null;
 
 function localDevice(): Device {
   const { deviceId, deviceName } = useAppStore.getState();
@@ -84,6 +106,56 @@ export const useSessionStore = create<SessionState>((set, get) => {
     if (useAppStore.getState().saveHistory) void saveMessage(message);
   };
 
+  /**
+   * Patch a timeline message in place. `persist` re-saves the record — used
+   * on status transitions; bare progress ticks stay in memory only.
+   */
+  const updateMessage = (id: string, patch: Partial<Message>, persist = false): void => {
+    let updated: Message | undefined;
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? (updated = { ...m, ...patch }) : m)),
+    }));
+    if (persist && updated && useAppStore.getState().saveHistory) {
+      void saveMessage(updated);
+    }
+  };
+
+  const findMessage = (id: string): Message | undefined =>
+    get().messages.find((m) => m.id === id);
+
+  const sendFrame = (frame: ChannelFrame): boolean =>
+    peer?.send(JSON.stringify(frame)) ?? false;
+
+  /** Finish an incoming file: build the Blob, expose a download URL. */
+  const finishReceive = (id: string, blob: Blob): void => {
+    const url = URL.createObjectURL(blob);
+    set((s) => ({ fileUrls: { ...s.fileUrls, [id]: url }, transferring: false }));
+    updateMessage(id, { status: 'completed', progress: 100, completedAt: Date.now() }, true);
+  };
+
+  /** Sender pump: reads the file chunk by chunk with backpressure. */
+  const runSend = async (id: string, file: File, myEpoch: number): Promise<void> => {
+    const result = await pumpFile(
+      file,
+      (chunk) => (peer ? peer.sendWithBackpressure(chunk) : Promise.resolve(false)),
+      (sentBytes) => {
+        if (epoch !== myEpoch) return;
+        const pct = Math.round((sentBytes / Math.max(1, file.size)) * 100);
+        if (findMessage(id)?.progress !== pct) updateMessage(id, { progress: pct });
+      },
+      () => cancelledSends.has(id) || epoch !== myEpoch,
+    );
+    if (epoch !== myEpoch) return;
+    set({ transferring: false });
+    if (result === 'completed') {
+      updateMessage(id, { status: 'completed', progress: 100, completedAt: Date.now() }, true);
+    } else if (result === 'cancelled') {
+      updateMessage(id, { status: 'cancelled' }, true);
+    } else {
+      updateMessage(id, { status: 'failed', error: 'Transfer failed — connection dropped.' }, true);
+    }
+  };
+
   const pushSystemMessage = (content: string): void => {
     const { sessionId, peer: peerDevice } = get();
     pushMessage({
@@ -101,10 +173,10 @@ export const useSessionStore = create<SessionState>((set, get) => {
     });
   };
 
-  const handleFrame = (frame: ChannelFrame): void => {
+  const handleFrame = (frame: ChannelFrame, myEpoch: number): void => {
+    const { sessionId, peer: peerDevice } = get();
     switch (frame.type) {
       case 'text': {
-        const { sessionId, peer: peerDevice } = get();
         pushMessage({
           // Reuse the sender's id so both sides address the same message.
           id: frame.id || createId('msg_'),
@@ -121,6 +193,80 @@ export const useSessionStore = create<SessionState>((set, get) => {
         });
         break;
       }
+
+      case 'file-offer': {
+        // A retry re-offers with the same id: reset the existing bubble
+        // instead of appending a duplicate.
+        if (findMessage(frame.id)) {
+          updateMessage(
+            frame.id,
+            { status: 'pending', progress: 0, error: undefined, file: frame.file },
+            true,
+          );
+        } else {
+          pushMessage({
+            id: frame.id,
+            sessionId: sessionId ?? 'none',
+            type: 'file',
+            direction: 'received',
+            senderDeviceId: peerDevice?.id ?? 'unknown',
+            receiverDeviceId: localDevice().id,
+            file: frame.file,
+            status: 'pending',
+            progress: 0,
+            createdAt: Date.now(),
+            peerDeviceName: peerDevice?.name,
+          });
+        }
+        break;
+      }
+
+      case 'file-accept': {
+        const file = outgoingFiles.get(frame.id);
+        if (!file || get().transferring) break;
+        cancelledSends.delete(frame.id);
+        set({ transferring: true });
+        updateMessage(frame.id, { status: 'transferring', progress: 0 }, true);
+        void runSend(frame.id, file, myEpoch);
+        break;
+      }
+
+      case 'file-reject': {
+        if (!outgoingFiles.has(frame.id)) break;
+        updateMessage(frame.id, { status: 'rejected' }, true);
+        pushSystemMessage('Peer declined the file');
+        break;
+      }
+
+      case 'file-cancel': {
+        // Sender side: flag the pump; it marks the message itself. If the
+        // offer was still pending (no pump running), mark it here.
+        cancelledSends.add(frame.id);
+        const message = findMessage(frame.id);
+        if (message && (message.status === 'pending' || message.direction === 'received')) {
+          updateMessage(frame.id, { status: 'cancelled' }, true);
+        }
+        // Receiver side: drop the partial transfer.
+        if (activeReceive?.id === frame.id) {
+          activeReceive = null;
+          set({ transferring: false });
+        }
+        break;
+      }
+    }
+  };
+
+  /** Incoming binary frame = one chunk of the accepted transfer. */
+  const handleChunk = (chunk: ArrayBuffer): void => {
+    if (!activeReceive) return;
+    const { id, assembler } = activeReceive;
+    assembler.append(chunk);
+    const pct = Math.round((assembler.received / Math.max(1, assembler.meta.size)) * 100);
+    if (findMessage(id)?.progress !== pct) updateMessage(id, { progress: pct });
+    if (assembler.done) {
+      const blob = assembler.toBlob();
+      activeReceive = null;
+      finishReceive(id, blob);
     }
   };
 
@@ -158,9 +304,12 @@ export const useSessionStore = create<SessionState>((set, get) => {
         },
         onMessage: (data) => {
           if (epoch !== myEpoch) return;
-          if (typeof data !== 'string') return; // binary chunks: Phase 3
-          const frame = parseFrame(data);
-          if (frame) handleFrame(frame);
+          if (typeof data === 'string') {
+            const frame = parseFrame(data);
+            if (frame) handleFrame(frame, myEpoch);
+          } else {
+            handleChunk(data);
+          }
         },
       },
     );
@@ -205,9 +354,18 @@ export const useSessionStore = create<SessionState>((set, get) => {
     return signaling.connect(signalingUrl());
   };
 
+  /** Release everything tied to the previous session's transfers. */
+  const resetTransferState = (): void => {
+    outgoingFiles.clear();
+    cancelledSends.clear();
+    activeReceive = null;
+    for (const url of Object.values(get().fileUrls)) URL.revokeObjectURL(url);
+  };
+
   const beginAttempt = (isHost: boolean): number => {
     epoch += 1;
     teardownServices();
+    resetTransferState();
     set({
       status: 'connecting',
       code: null,
@@ -216,6 +374,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
       isHost,
       sessionId: createId('sess_'),
       messages: [],
+      transferring: false,
+      fileUrls: {},
     });
     return epoch;
   };
@@ -228,6 +388,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
     error: null,
     sessionId: null,
     messages: [],
+    transferring: false,
+    fileUrls: {},
 
     async createRoom() {
       const myEpoch = beginAttempt(true);
@@ -281,9 +443,86 @@ export const useSessionStore = create<SessionState>((set, get) => {
       return true;
     },
 
+    sendFile(file: File) {
+      const { status, transferring, sessionId, peer: peerDevice } = get();
+      if (status !== 'connected' || transferring || !peer) return;
+
+      const id = createId('msg_');
+      const meta = makeFileMeta(file);
+      if (!sendFrame({ v: 1, type: 'file-offer', id, file: meta })) return;
+      outgoingFiles.set(id, file);
+
+      pushMessage({
+        id,
+        sessionId: sessionId ?? 'none',
+        type: 'file',
+        direction: 'sent',
+        senderDeviceId: localDevice().id,
+        receiverDeviceId: peerDevice?.id ?? 'unknown',
+        file: meta,
+        status: 'pending',
+        progress: 0,
+        createdAt: Date.now(),
+        peerDeviceName: peerDevice?.name,
+      });
+    },
+
+    acceptFile(messageId: string) {
+      const message = findMessage(messageId);
+      if (!message?.file || message.status !== 'pending' || get().transferring) return;
+      if (!sendFrame({ v: 1, type: 'file-accept', id: messageId })) return;
+
+      if (message.file.size === 0) {
+        // Nothing will arrive for an empty file — complete immediately.
+        updateMessage(messageId, { status: 'transferring' });
+        finishReceive(messageId, new Blob([], { type: message.file.mimeType }));
+        return;
+      }
+      activeReceive = { id: messageId, assembler: new ChunkAssembler(message.file) };
+      set({ transferring: true });
+      updateMessage(messageId, { status: 'transferring' }, true);
+    },
+
+    rejectFile(messageId: string) {
+      const message = findMessage(messageId);
+      if (!message || message.status !== 'pending') return;
+      sendFrame({ v: 1, type: 'file-reject', id: messageId });
+      updateMessage(messageId, { status: 'rejected' }, true);
+    },
+
+    cancelTransfer(messageId: string) {
+      const message = findMessage(messageId);
+      if (!message) return;
+      sendFrame({ v: 1, type: 'file-cancel', id: messageId });
+
+      if (message.direction === 'sent') {
+        // The pump notices the flag and finalises the message itself; if the
+        // offer was still pending there is no pump, so mark it here.
+        cancelledSends.add(messageId);
+        if (message.status === 'pending') {
+          updateMessage(messageId, { status: 'cancelled' }, true);
+        }
+      } else {
+        if (activeReceive?.id === messageId) activeReceive = null;
+        set({ transferring: false });
+        updateMessage(messageId, { status: 'cancelled' }, true);
+      }
+    },
+
+    retryFile(messageId: string) {
+      const { status, transferring } = get();
+      const message = findMessage(messageId);
+      const file = outgoingFiles.get(messageId);
+      if (!message?.file || !file || status !== 'connected' || transferring) return;
+      cancelledSends.delete(messageId);
+      if (!sendFrame({ v: 1, type: 'file-offer', id: messageId, file: message.file })) return;
+      updateMessage(messageId, { status: 'pending', progress: 0, error: undefined }, true);
+    },
+
     leave() {
       epoch += 1;
       teardownServices();
+      resetTransferState();
       set({
         status: 'idle',
         code: null,
@@ -292,6 +531,8 @@ export const useSessionStore = create<SessionState>((set, get) => {
         isHost: false,
         sessionId: null,
         messages: [],
+        transferring: false,
+        fileUrls: {},
       });
     },
   };
