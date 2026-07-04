@@ -4,6 +4,35 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.10.0] — Phases 12–15: v0.2 completion
+
+### Phase 12 — Folder transfer (req P2)
+
+- A picked folder is packed into one zip on the sender (fflate, store
+  mode, structure preserved via webkitRelativePath) and travels through
+  the existing file pipeline. Folder button next to the paperclip.
+  Verified E2E: a real directory tree arrives and unzips intact.
+
+### Phase 13 — Connection verification (端到端身份确认, req §6.2)
+
+- Both devices derive a six-digit code from the two DTLS certificate
+  fingerprints (sorted, SHA-256) once the DataChannel opens — identical
+  exactly when no man-in-the-middle intercepted the signalling. Shown in
+  the chat header and the timeline. E2E: codes match, and differ across
+  pairings.
+
+### Phase 14 — Device blocklist (req §6.2 第二阶段)
+
+- Block from the invitation banner; blocked devices vanish from the
+  nearby list, their invites are dropped silently, pairing is refused,
+  and blocking revokes trust. Settings section lists and unblocks.
+
+### Phase 15 — Calendar-view history (第二阶段)
+
+- List/Calendar toggle on the history page: month grid with per-day
+  record counts, prev/next month navigation, today outlined; selecting
+  a day filters the records (combined with chips/device/search).
+
 ## [0.9.0] — Phases 8–11: v0.2 feature set
 
 ### Phase 8 — Resumable transfers (断点续传)

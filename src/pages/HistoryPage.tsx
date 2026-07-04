@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { MessageIcon, SearchIcon, TrashIcon } from '@/components/ui/icons';
 import { FileTypeIcon } from '@/components/FileTypeIcon';
+import { HistoryCalendar, dayKeyOf } from '@/components/HistoryCalendar';
 import { cn, formatBytes, formatDateTime } from '@/lib/utils';
 import { fileCategory } from '@/lib/fileKind';
 import { db, deleteMessage, clearAllMessages } from '@/services/db';
@@ -131,6 +132,8 @@ export function HistoryPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
   const [device, setDevice] = useState<string>('all');
+  const [view, setView] = useState<'list' | 'calendar'>('list');
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const records = useLiveQuery(
     () => db.messages.orderBy('createdAt').reverse().toArray(),
@@ -149,6 +152,8 @@ export function HistoryPage() {
     return records.filter((r) => {
       if (!matchesFilter(r, filter)) return false;
       if (device !== 'all' && r.peerDeviceName !== device) return false;
+      if (view === 'calendar' && selectedDay && dayKeyOf(r.createdAt) !== selectedDay)
+        return false;
       if (!q) return true;
       const haystack = [r.content, r.file?.name, r.peerDeviceName]
         .filter(Boolean)
@@ -156,7 +161,7 @@ export function HistoryPage() {
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [records, query, filter, device]);
+  }, [records, query, filter, device, view, selectedDay]);
 
   const handleClearAll = () => {
     if (window.confirm('Delete all transfer history? This cannot be undone.')) {
@@ -186,6 +191,32 @@ export function HistoryPage() {
             Clear
           </Button>
         </div>
+
+        {/* View toggle: flat list vs calendar month grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {(['list', 'calendar'] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={cn(
+                'rounded-xl border px-3 py-1.5 text-sm font-medium capitalize transition-colors',
+                view === v
+                  ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800',
+              )}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+
+        {view === 'calendar' && records && (
+          <HistoryCalendar
+            records={records}
+            selectedDay={selectedDay}
+            onSelectDay={setSelectedDay}
+          />
+        )}
 
         {/* Filter chips (req §7.4) */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">

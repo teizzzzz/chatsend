@@ -12,14 +12,15 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-✅ **v0.2 feature set (Phase 11).** Everything from the MVP — pairing by code
-/ QR / nearby list, text messaging, chunked P2P file transfer with
+✅ **v0.2 complete (Phase 15).** Everything from the MVP — pairing by code /
+QR / nearby list, text messaging, chunked P2P file transfer with
 accept/decline + progress + retry, multi-file queue, drag & drop, history
 with filters, PWA install mode — plus **resumable transfers**, **trusted
-devices with auto-accept**, **same-network device discovery**, and a Tauri
-desktop shell. A 19-test Playwright suite runs the whole stack (two browsers
-+ real WebRTC) in CI on every push; deployment is one Node process or one
-Docker image.
+devices with auto-accept**, **same-network device discovery**, **folder
+transfer**, **connection verification codes**, a **device blocklist**,
+**calendar-view history**, and a Tauri desktop shell. A 23-test Playwright
+suite runs the whole stack (two browsers + real WebRTC) in CI on every push;
+deployment is one Node process or one Docker image.
 
 ## Tech stack
 
@@ -199,10 +200,18 @@ The four core entities (defined in `src/types/index.ts`):
 - [x] **Phase 11** — Desktop shell (Tauri v2, `src-tauri/`) + configurable
       server URL in Settings; mobile store path documented
       (see `docs/native-shells.md`).
+- [x] **Phase 12** — Folder transfer: a picked directory is packed into one
+      zip (structure preserved) and sent through the file pipeline.
+- [x] **Phase 13** — Connection verification: a six-digit code derived from
+      both DTLS fingerprints, identical on both devices when untampered.
+- [x] **Phase 14** — Device blocklist: hidden from nearby, invites dropped,
+      pairing refused; managed in Settings.
+- [x] **Phase 15** — Calendar-view history: month grid with per-day counts,
+      day selection filters the record list.
 
 ### Later candidates
 
-Folder transfer, PIN verification, device blocklist, calendar-view history,
-store-distributed mobile builds.
+Store-distributed mobile builds (Capacitor path documented), folder
+downloads unpacked client-side, transfer speed/ETA display.
 
 See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each phase.

@@ -470,7 +470,7 @@ export function ChatPage() {
               ? 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
               : 'text-slate-300 dark:text-slate-700',
           )}
-          aria-label="Send folder"
+          aria-label="Attach folder"
           title={zipping ? 'Packing folder…' : 'Send a folder (packed as zip)'}
           disabled={!connected || transferring || zipping}
         >

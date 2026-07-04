@@ -20,7 +20,7 @@ test('QR code renders and its link auto-joins the room', async ({ browser }) => 
 test('multi-file selection queues offers one at a time', async ({ browser }) => {
   const { pageA, pageB } = await pairDevices(browser);
 
-  await pageA.locator('input[type=file]').setInputFiles([
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles([
     { name: 'q1.png', mimeType: 'image/png', buffer: Buffer.from('img'.repeat(20_000)) },
     { name: 'q2.pdf', mimeType: 'application/pdf', buffer: Buffer.from('pdf'.repeat(20_000)) },
     { name: 'q3.zip', mimeType: 'application/zip', buffer: Buffer.from('zip'.repeat(20_000)) },
@@ -57,7 +57,7 @@ test('history filter chips and device filter work', async ({ browser }) => {
   const { pageA, pageB } = await pairDevices(browser);
 
   // Build a mixed history: image accepted, archive declined.
-  await pageA.locator('input[type=file]').setInputFiles({
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles({
     name: 'sunset.png',
     mimeType: 'image/png',
     buffer: Buffer.from('img'.repeat(10_000)),
@@ -65,7 +65,7 @@ test('history filter chips and device filter work', async ({ browser }) => {
   await pageB.getByRole('button', { name: 'Accept' }).click();
   await expect(pageB.locator('a[download="sunset.png"]')).toBeVisible({ timeout: 15_000 });
 
-  await pageA.locator('input[type=file]').setInputFiles({
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles({
     name: 'backup.zip',
     mimeType: 'application/zip',
     buffer: Buffer.from('zip'.repeat(10_000)),

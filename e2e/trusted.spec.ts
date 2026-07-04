@@ -16,7 +16,7 @@ test('trusted peer files auto-accept; untrust restores confirmation', async ({
   await expect(pageB.getByRole('button', { name: 'Trusted ✓' })).toBeVisible();
 
   // A sends a file — B must download it with no Accept click.
-  await pageA.locator('input[type=file]').setInputFiles({
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles({
     name: 'auto.pdf',
     mimeType: 'application/pdf',
     buffer: Buffer.from('pdf'.repeat(10_000)),
@@ -40,7 +40,7 @@ test('multi-file queue auto-accepts sequentially from a trusted peer', async ({
   const { pageA, pageB } = await pairDevices(browser);
   await pageB.getByRole('button', { name: 'Trust', exact: true }).click();
 
-  await pageA.locator('input[type=file]').setInputFiles([
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles([
     { name: 'a1.png', mimeType: 'image/png', buffer: Buffer.from('x'.repeat(30_000)) },
     { name: 'a2.png', mimeType: 'image/png', buffer: Buffer.from('y'.repeat(30_000)) },
   ]);

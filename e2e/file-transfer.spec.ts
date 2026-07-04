@@ -13,7 +13,7 @@ test('a 2 MB file arrives byte-for-byte intact', async ({ browser }) => {
   }
   const wantHash = createHash('sha256').update(payload).digest('hex');
 
-  await pageA.locator('input[type=file]').setInputFiles({
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles({
     name: 'photos.zip',
     mimeType: 'application/zip',
     buffer: payload,
@@ -38,7 +38,7 @@ test('a 2 MB file arrives byte-for-byte intact', async ({ browser }) => {
 test('declined offer can be retried and then completes', async ({ browser }) => {
   const { pageA, pageB } = await pairDevices(browser);
 
-  await pageA.locator('input[type=file]').setInputFiles({
+  await pageA.locator('input[type=file]:not([webkitdirectory])').setInputFiles({
     name: 'notes.pdf',
     mimeType: 'application/pdf',
     buffer: Buffer.from('pdf-bytes-'.repeat(1000)),
