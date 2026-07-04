@@ -18,10 +18,17 @@ interface AppState {
   theme: ThemeMode;
   /** When off, transfers still work but nothing is written to history. */
   saveHistory: boolean;
+  /**
+   * Devices this user marked as trusted (req §6.2). File offers from a
+   * trusted device are accepted automatically.
+   */
+  trustedDevices: Record<string, { name: string; trustedAt: number }>;
 
   setDeviceName: (name: string) => void;
   setTheme: (theme: ThemeMode) => void;
   setSaveHistory: (on: boolean) => void;
+  trustDevice: (id: string, name: string) => void;
+  untrustDevice: (id: string) => void;
 }
 
 /** A friendly default device name so first-run isn't blank. */
@@ -39,10 +46,21 @@ export const useAppStore = create<AppState>()(
       deviceName: defaultDeviceName(),
       theme: 'system',
       saveHistory: true,
+      trustedDevices: {},
 
       setDeviceName: (name) => set({ deviceName: name.trim() || defaultDeviceName() }),
       setTheme: (theme) => set({ theme }),
       setSaveHistory: (on) => set({ saveHistory: on }),
+      trustDevice: (id, name) =>
+        set((s) => ({
+          trustedDevices: { ...s.trustedDevices, [id]: { name, trustedAt: Date.now() } },
+        })),
+      untrustDevice: (id) =>
+        set((s) => {
+          const rest = { ...s.trustedDevices };
+          delete rest[id];
+          return { trustedDevices: rest };
+        }),
     }),
     {
       name: 'chatsend.settings',

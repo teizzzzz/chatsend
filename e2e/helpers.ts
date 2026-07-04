@@ -25,10 +25,13 @@ export async function newDevice(
   viewport?: ViewportSize,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext(viewport ? { viewport } : {});
-  await context.addInitScript(
-    (v: string) => localStorage.setItem('chatsend.settings', v),
-    deviceSettings(name),
-  );
+  // Seed device identity on first load only — later navigations must keep
+  // whatever the app persisted (e.g. trusted devices).
+  await context.addInitScript((v: string) => {
+    if (!localStorage.getItem('chatsend.settings')) {
+      localStorage.setItem('chatsend.settings', v);
+    }
+  }, deviceSettings(name));
   const page = await context.newPage();
   return { context, page };
 }

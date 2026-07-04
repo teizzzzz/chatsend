@@ -43,8 +43,16 @@ function Section({
 }
 
 export function SettingsPage() {
-  const { deviceName, setDeviceName, theme, setTheme, saveHistory, setSaveHistory } =
-    useAppStore();
+  const {
+    deviceName,
+    setDeviceName,
+    theme,
+    setTheme,
+    saveHistory,
+    setSaveHistory,
+    trustedDevices,
+    untrustDevice,
+  } = useAppStore();
   const [nameDraft, setNameDraft] = useState(deviceName);
   const saved = nameDraft.trim() === deviceName;
 
@@ -90,6 +98,28 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+        </Section>
+
+        <Section
+          title="Trusted devices"
+          description="Files from trusted devices are accepted automatically. Trust a device from the chat header while connected."
+        >
+          {Object.keys(trustedDevices).length === 0 ? (
+            <p className="text-sm text-slate-400">No trusted devices yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {Object.entries(trustedDevices).map(([id, info]) => (
+                <li key={id} className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm text-slate-700 dark:text-slate-300">
+                    {info.name}
+                  </span>
+                  <Button variant="secondary" size="sm" onClick={() => untrustDevice(id)}>
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
 
         <Section

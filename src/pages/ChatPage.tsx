@@ -16,6 +16,7 @@ import { cn, formatBytes, formatTime } from '@/lib/utils';
 import { linkify } from '@/lib/linkify';
 import type { Message } from '@/types';
 import { useSessionStore, type SessionStatus } from '@/store/useSessionStore';
+import { useAppStore } from '@/store/useAppStore';
 
 /**
  * The chat-style transfer surface. Header shows the live peer name and
@@ -265,6 +266,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const { status, peer, messages, transferring, sendText, sendFiles, leave } =
     useSessionStore();
+  const { trustedDevices, trustDevice, untrustDevice } = useAppStore();
   const [draft, setDraft] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const dragDepth = useRef(0);
@@ -342,6 +344,24 @@ export function ChatPage() {
             {STATUS_LABEL[status]}
           </p>
         </div>
+        {connected && peer && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              trustedDevices[peer.id]
+                ? untrustDevice(peer.id)
+                : trustDevice(peer.id, peer.name)
+            }
+            title={
+              trustedDevices[peer.id]
+                ? 'Files from this device are accepted automatically'
+                : 'Trust this device to auto-accept its files'
+            }
+          >
+            {trustedDevices[peer.id] ? 'Trusted ✓' : 'Trust'}
+          </Button>
+        )}
         {connected && (
           <Button variant="ghost" size="sm" onClick={handleLeave}>
             Disconnect

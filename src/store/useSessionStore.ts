@@ -288,6 +288,15 @@ export const useSessionStore = create<SessionState>((set, get) => {
             peerDeviceName: peerDevice?.name,
           });
         }
+        // Trusted devices skip the manual confirmation (req §6.2).
+        if (
+          peerDevice &&
+          useAppStore.getState().trustedDevices[peerDevice.id] &&
+          !get().transferring
+        ) {
+          pushSystemMessage('Auto-accepted from trusted device');
+          get().acceptFile(frame.id);
+        }
         break;
       }
 
