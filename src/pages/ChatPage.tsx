@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Button } from '@/components/ui/Button';
@@ -6,88 +5,51 @@ import { Input } from '@/components/ui/Input';
 import { BackIcon, PaperclipIcon, SendIcon } from '@/components/ui/icons';
 import { cn, formatTime } from '@/lib/utils';
 import type { Message } from '@/types';
+import { useSessionStore, type SessionStatus } from '@/store/useSessionStore';
 
 /**
- * The chat-style transfer surface — the heart of the app.
- *
- * Layout: a fixed header (peer name + status), a scrollable bubble list, and a
- * fixed composer (text input, file button, send). Outgoing bubbles align
- * right, incoming left. Phase 0 uses static sample messages and a local-echo
- * send so the interaction shape is visible; real messages flow over the
- * DataChannel in a later phase.
+ * The chat-style transfer surface. Header shows the live peer name and
+ * connection status from the session store; the timeline renders the
+ * session's messages (system events only in Phase 1 — text lands in Phase 2,
+ * so the composer is present but disabled).
  */
 
-// Sample data so the layout is reviewable before transport exists.
-const SAMPLE: Message[] = [
-  {
-    id: 'm1',
-    sessionId: 's1',
-    kind: 'text',
-    direction: 'incoming',
-    status: 'received',
-    text: 'Hey! Ready to send those photos?',
-    peerName: "Alex's Laptop",
-    createdAt: Date.now() - 1000 * 60 * 5,
-  },
-  {
-    id: 'm2',
-    sessionId: 's1',
-    kind: 'text',
-    direction: 'outgoing',
-    status: 'sent',
-    text: 'Yep, sending now.',
-    createdAt: Date.now() - 1000 * 60 * 4,
-  },
-];
+const STATUS_LABEL: Record<SessionStatus, string> = {
+  idle: 'Not connected',
+  connecting: 'Connecting…',
+  waiting: 'Waiting for peer…',
+  joining: 'Joining…',
+  negotiating: 'Establishing connection…',
+  connected: 'Connected',
+  disconnected: 'Disconnected',
+  failed: 'Connection failed',
+};
 
-function Bubble({ message }: { message: Message }) {
-  const isOutgoing = message.direction === 'outgoing';
+function statusDotClass(status: SessionStatus): string {
+  if (status === 'connected') return 'bg-emerald-500';
+  if (status === 'disconnected' || status === 'failed') return 'bg-red-500';
+  if (status === 'idle') return 'bg-slate-300 dark:bg-slate-600';
+  return 'bg-amber-400';
+}
+
+function SystemChip({ message }: { message: Message }) {
   return (
-    <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
-      <div
-        className={cn(
-          'max-w-[78%] rounded-2xl px-3.5 py-2 text-sm shadow-sm',
-          isOutgoing
-            ? 'rounded-br-md bg-brand-600 text-white'
-            : 'rounded-bl-md bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100',
-        )}
-      >
-        <p className="whitespace-pre-wrap break-words">{message.text}</p>
-        <p
-          className={cn(
-            'mt-1 text-right text-[10px]',
-            isOutgoing ? 'text-brand-100' : 'text-slate-400',
-          )}
-        >
-          {formatTime(message.createdAt)}
-        </p>
-      </div>
+    <div className="flex justify-center">
+      <span className="rounded-full bg-slate-200/70 px-3 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        {message.content} · {formatTime(message.createdAt)}
+      </span>
     </div>
   );
 }
 
 export function ChatPage() {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>(SAMPLE);
-  const [draft, setDraft] = useState('');
+  const { status, peer, messages, leave } = useSessionStore();
+  const connected = status === 'connected';
 
-  // Phase 0: local echo only. No network, no persistence yet.
-  const handleSend = () => {
-    const text = draft.trim();
-    if (!text) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `local_${Date.now()}`,
-        sessionId: 's1',
-        kind: 'text',
-        direction: 'outgoing',
-        status: 'sent',
-        text,
-        createdAt: Date.now(),
-      },
-    ]);
-    setDraft('');
+  const handleLeave = () => {
+    leave();
+    navigate('/');
   };
 
   return (
@@ -95,51 +57,59 @@ export function ChatPage() {
       {/* Header */}
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <button
-          onClick={() => navigate('/')}
+          onClick={handleLeave}
           className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           aria-label="Back"
         >
           <BackIcon className="text-xl" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-slate-900 dark:text-slate-100">
-            Alex's Laptop
+            {peer?.name ?? 'No device'}
           </p>
           <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <span className="h-2 w-2 rounded-full bg-slate-300" />
-            Not connected (Phase 0)
+            <span className={cn('h-2 w-2 rounded-full', statusDotClass(status))} />
+            {STATUS_LABEL[status]}
           </p>
         </div>
+        {connected && (
+          <Button variant="ghost" size="sm" onClick={handleLeave}>
+            Disconnect
+          </Button>
+        )}
       </header>
 
-      {/* Message list */}
+      {/* Timeline */}
       <div className="flex-1 space-y-2 overflow-y-auto scrollbar-thin p-4">
-        {messages.map((m) => (
-          <Bubble key={m.id} message={m} />
-        ))}
+        {status === 'idle' ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <p className="text-sm text-slate-400">
+              No active session. Pair with another device first.
+            </p>
+            <Button variant="secondary" onClick={() => navigate('/')}>
+              Go home
+            </Button>
+          </div>
+        ) : (
+          messages.map((m) => <SystemChip key={m.id} message={m} />)
+        )}
       </div>
 
-      {/* Composer */}
+      {/* Composer — enabled in Phase 2 (text over the DataChannel). */}
       <div className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
         <button
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400"
           aria-label="Attach file"
-          title="File sending arrives in a later phase"
+          title="File sending arrives in Phase 3"
+          disabled
         >
           <PaperclipIcon className="text-xl" />
         </button>
         <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Type a message…"
+          placeholder={connected ? 'Text messages arrive in Phase 2' : 'Not connected'}
+          disabled
         />
-        <Button
-          size="md"
-          className="w-10 shrink-0 px-0"
-          onClick={handleSend}
-          aria-label="Send"
-        >
+        <Button size="md" className="w-10 shrink-0 px-0" aria-label="Send" disabled>
           <SendIcon className="text-lg" />
         </Button>
       </div>

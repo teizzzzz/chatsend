@@ -53,8 +53,12 @@ export function formatDateTime(epochMs: number): string {
   });
 }
 
-/** Best-effort platform guess for the current browser. */
-export function detectPlatform(): 'desktop' | 'mobile' | 'tablet' | 'unknown' {
+/**
+ * Best-effort form-factor guess for the current browser, used only to pick a
+ * friendly default device name. (The Device.platform field is always 'web'
+ * for the web build — see types.)
+ */
+export function detectFormFactor(): 'desktop' | 'mobile' | 'tablet' | 'unknown' {
   if (typeof navigator === 'undefined') return 'unknown';
   const ua = navigator.userAgent;
   if (/iPad|Tablet/i.test(ua)) return 'tablet';

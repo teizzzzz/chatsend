@@ -12,9 +12,9 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-🚧 **Phase 0 — Scaffolding.** The full app structure, routes, screens, UI
-system, and data model are in place. Real pairing and transfer are stubbed and
-land in later phases (see the roadmap).
+🚧 **Phase 1 — Pairing works.** Two browsers can pair with a 6-character code
+and establish a direct WebRTC DataChannel via the bundled signalling server.
+Text messaging over the wire is next (Phase 2); file transfer follows.
 
 ## Tech stack
 
@@ -25,45 +25,64 @@ land in later phases (see the roadmap).
 | Styling            | Tailwind CSS (class dark mode)  |
 | State              | Zustand (persisted settings)    |
 | Local database     | IndexedDB via Dexie.js *(later)*|
-| Signalling         | WebSocket server *(later)*      |
-| Transport          | WebRTC DataChannel *(later)*    |
+| Signalling         | Node.js + `ws` WebSocket server |
+| Transport          | WebRTC DataChannel              |
 
 ## Getting started
 
+Two processes in dev — the web app and the signalling server:
+
 ```bash
 npm install
-npm run dev      # start Vite dev server on http://localhost:5173
+npm run server   # signalling server on ws://localhost:3001/ws
+npm run dev      # Vite dev server on http://localhost:5173 (proxies /ws)
+```
+
+Open http://localhost:5173 in two browser windows: *Create connection* in one,
+*Join connection* + the code in the other.
+
+Other scripts:
+
+```bash
 npm run build    # type-check + production build
 npm run preview  # preview the production build
 npm run lint     # lint
 npm run typecheck
 ```
 
+The frontend connects to `ws(s)://<origin>/ws` by default (the Vite dev/preview
+proxy forwards it to port 3001); set `VITE_SIGNALING_URL` to point elsewhere.
+
 ## Project structure
 
 ```
+server/
+└── index.js              # WebSocket signalling server (rooms + relay only)
 src/
 ├── main.tsx              # React entry, mounts the router
 ├── App.tsx               # Route table + theme application
-├── index.css            # Tailwind layers + base styles
-├── types/               # Core domain types (single source of truth)
-│   └── index.ts         #   Device, TransferSession, Message, FileMeta …
-├── pages/               # One component per screen (routed)
-│   ├── HomePage.tsx     #   create / join / history / settings entry points
-│   ├── ConnectPage.tsx  #   generate or enter a 6-digit connection code
-│   ├── ChatPage.tsx     #   chat-style transfer view (bubbles + composer)
-│   ├── HistoryPage.tsx  #   searchable transfer history
-│   └── SettingsPage.tsx #   device name, theme, clear data
-├── components/          # Reusable UI
-│   ├── Layout.tsx       #   app shell (header + centered column)
-│   └── ui/              #   Button, Card, Input, icons
-├── store/               # Zustand stores
-│   └── useAppStore.ts   #   device identity + theme (persisted)
-├── lib/                 # Framework-agnostic helpers
-│   ├── utils.ts         #   ids, codes, byte/time formatting, cn()
-│   └── useTheme.ts      #   applies light/dark/system to <html>
-└── services/            # Connection & transport layer (empty in Phase 0)
-    └── README.md        #   planned signaling / peer / transfer / db modules
+├── index.css             # Tailwind layers + base styles
+├── types/                # Core domain types (single source of truth)
+│   ├── index.ts          #   Device, TransferSession, Message, FileMeta …
+│   └── signaling.ts      #   client<->server wire protocol + signal payloads
+├── pages/                # One component per screen (routed)
+│   ├── HomePage.tsx      #   create / join / history / settings entry points
+│   ├── ConnectPage.tsx   #   create room (show code) or join by code
+│   ├── ChatPage.tsx      #   chat-style transfer view (live peer + status)
+│   ├── HistoryPage.tsx   #   searchable transfer history
+│   └── SettingsPage.tsx  #   device name, theme, clear data
+├── components/           # Reusable UI
+│   ├── Layout.tsx        #   app shell (header + centered column)
+│   └── ui/               #   Button, Card, Input, icons
+├── store/                # Zustand stores
+│   ├── useAppStore.ts    #   device identity + theme (persisted)
+│   └── useSessionStore.ts#   live pairing state, orchestrates the services
+├── lib/                  # Framework-agnostic helpers
+│   ├── utils.ts          #   ids, codes, byte/time formatting, cn()
+│   └── useTheme.ts       #   applies light/dark/system to <html>
+└── services/             # Connection & transport layer (React-free)
+    ├── signaling.ts      #   WebSocket client for the signalling server
+    └── peer.ts           #   RTCPeerConnection + DataChannel wrapper
 ```
 
 ### Design principles
@@ -90,9 +109,11 @@ The four core entities (defined in `src/types/index.ts`):
 ## Roadmap
 
 - [x] **Phase 0** — Project scaffolding, routes, screens, UI system, types.
-- [ ] **Phase 1** — Local IndexedDB (Dexie) history + real settings wiring.
-- [ ] **Phase 2** — WebSocket signalling server + room create/join.
-- [ ] **Phase 3** — WebRTC DataChannel + text messaging over the wire.
-- [ ] **Phase 4** — Chunked file transfer with accept/reject + progress.
+- [x] **Phase 1** — Pairing: signalling server, room create/join by code,
+      WebRTC DataChannel establishment, live connection status.
+- [ ] **Phase 2** — Text messages over the DataChannel + IndexedDB history.
+- [ ] **Phase 3** — Chunked file transfer with accept/reject + progress.
+- [ ] **Phase 4** — History page backed by real data: search, filter, delete.
+- [ ] **Phase 5** — Polish: drag & drop, multi-file queue, mobile fit & finish.
 
 See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each phase.

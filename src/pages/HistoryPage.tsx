@@ -19,37 +19,62 @@ const SAMPLE: Message[] = [
   {
     id: 'h1',
     sessionId: 's1',
-    kind: 'file',
-    direction: 'outgoing',
-    status: 'sent',
-    file: { id: 'f1', name: 'vacation.zip', size: 24_500_000, mimeType: 'application/zip' },
-    peerName: "Alex's Laptop",
+    type: 'file',
+    direction: 'sent',
+    senderDeviceId: 'me',
+    receiverDeviceId: 'peer1',
+    file: {
+      name: 'vacation.zip',
+      size: 24_500_000,
+      mimeType: 'application/zip',
+      extension: 'zip',
+      chunkSize: 65_536,
+      totalChunks: 374,
+    },
+    status: 'completed',
+    progress: 100,
+    peerDeviceName: "Alex's Laptop",
     createdAt: Date.now() - 1000 * 60 * 60 * 3,
+    completedAt: Date.now() - 1000 * 60 * 60 * 3 + 42_000,
   },
   {
     id: 'h2',
     sessionId: 's1',
-    kind: 'text',
-    direction: 'incoming',
-    status: 'received',
-    text: 'Thanks, got the files!',
-    peerName: "Alex's Laptop",
+    type: 'text',
+    direction: 'received',
+    senderDeviceId: 'peer1',
+    receiverDeviceId: 'me',
+    content: 'Thanks, got the files!',
+    status: 'completed',
+    progress: 100,
+    peerDeviceName: "Alex's Laptop",
     createdAt: Date.now() - 1000 * 60 * 60 * 3 + 5000,
   },
   {
     id: 'h3',
     sessionId: 's2',
-    kind: 'file',
-    direction: 'incoming',
-    status: 'received',
-    file: { id: 'f2', name: 'slides.pdf', size: 3_200_000, mimeType: 'application/pdf' },
-    peerName: 'Meeting Room PC',
+    type: 'file',
+    direction: 'received',
+    senderDeviceId: 'peer2',
+    receiverDeviceId: 'me',
+    file: {
+      name: 'slides.pdf',
+      size: 3_200_000,
+      mimeType: 'application/pdf',
+      extension: 'pdf',
+      chunkSize: 65_536,
+      totalChunks: 49,
+    },
+    status: 'completed',
+    progress: 100,
+    peerDeviceName: 'Meeting Room PC',
     createdAt: Date.now() - 1000 * 60 * 60 * 26,
+    completedAt: Date.now() - 1000 * 60 * 60 * 26 + 8000,
   },
 ];
 
 function DirectionBadge({ direction }: { direction: Message['direction'] }) {
-  const incoming = direction === 'incoming';
+  const incoming = direction === 'received';
   return (
     <span
       className={cn(
@@ -76,15 +101,15 @@ function HistoryRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
-            {message.kind === 'file' ? message.file?.name : message.text}
+            {message.type === 'file' ? message.file?.name : message.content}
           </p>
           <DirectionBadge direction={message.direction} />
         </div>
         <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-          {message.kind === 'file' && message.file
+          {message.type === 'file' && message.file
             ? `${formatBytes(message.file.size)} · `
             : ''}
-          {message.peerName} · {formatDateTime(message.createdAt)}
+          {message.peerDeviceName} · {formatDateTime(message.createdAt)}
         </p>
       </div>
       <button
@@ -106,7 +131,7 @@ export function HistoryPage() {
     const q = query.trim().toLowerCase();
     if (!q) return records;
     return records.filter((r) => {
-      const haystack = [r.text, r.file?.name, r.peerName]
+      const haystack = [r.content, r.file?.name, r.peerDeviceName]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();

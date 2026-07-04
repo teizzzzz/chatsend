@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ThemeMode } from '@/types';
-import { createId, detectPlatform } from '@/lib/utils';
+import { createId, detectFormFactor } from '@/lib/utils';
 
 /**
  * Global app-level settings that must survive reloads: this device's identity
@@ -23,9 +23,9 @@ interface AppState {
 
 /** A friendly default device name so first-run isn't blank. */
 function defaultDeviceName(): string {
-  const platform = detectPlatform();
+  const form = detectFormFactor();
   const label =
-    platform === 'mobile' ? 'Phone' : platform === 'tablet' ? 'Tablet' : 'Device';
+    form === 'mobile' ? 'Phone' : form === 'tablet' ? 'Tablet' : 'Device';
   return `My ${label}`;
 }
 

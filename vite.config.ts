@@ -13,5 +13,15 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Frontend talks to the signalling server via same-origin /ws so no
+    // URL configuration is needed in dev. Run `npm run server` alongside.
+    proxy: {
+      '/ws': { target: 'ws://localhost:3001', ws: true },
+    },
+  },
+  preview: {
+    proxy: {
+      '/ws': { target: 'ws://localhost:3001', ws: true },
+    },
   },
 });
