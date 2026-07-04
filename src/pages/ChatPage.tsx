@@ -8,10 +8,12 @@ import {
   CheckIcon,
   CopyIcon,
   DownloadIcon,
+  FolderIcon,
   PaperclipIcon,
   SendIcon,
 } from '@/components/ui/icons';
 import { FileTypeIcon } from '@/components/FileTypeIcon';
+import { zipFolder } from '@/services/folderZip';
 import { cn, formatBytes, formatTime } from '@/lib/utils';
 import { linkify } from '@/lib/linkify';
 import type { Message } from '@/types';
@@ -269,10 +271,23 @@ export function ChatPage() {
   const { trustedDevices, trustDevice, untrustDevice } = useAppStore();
   const [draft, setDraft] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [zipping, setZipping] = useState(false);
   const dragDepth = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const connected = status === 'connected';
+
+  // Folder pick → pack into one zip → normal file pipeline.
+  const handleFolder = async (files: File[]) => {
+    if (files.length === 0) return;
+    setZipping(true);
+    try {
+      sendFiles([await zipFolder(files)]);
+    } finally {
+      setZipping(false);
+    }
+  };
 
   // Keep the newest message in view.
   useEffect(() => {
@@ -406,19 +421,43 @@ export function ChatPage() {
             e.target.value = ''; // allow re-picking the same file
           }}
         />
+        <input
+          ref={folderInputRef}
+          type="file"
+          className="hidden"
+          {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+          onChange={(e) => {
+            void handleFolder([...(e.target.files ?? [])]);
+            e.target.value = '';
+          }}
+        />
         <button
           onClick={() => fileInputRef.current?.click()}
           className={cn(
             'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-            connected && !transferring
+            connected && !transferring && !zipping
               ? 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
               : 'text-slate-300 dark:text-slate-700',
           )}
           aria-label="Attach file"
           title={transferring ? 'A transfer is already in progress' : 'Send a file'}
-          disabled={!connected || transferring}
+          disabled={!connected || transferring || zipping}
         >
           <PaperclipIcon className="text-xl" />
+        </button>
+        <button
+          onClick={() => folderInputRef.current?.click()}
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
+            connected && !transferring && !zipping
+              ? 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              : 'text-slate-300 dark:text-slate-700',
+          )}
+          aria-label="Send folder"
+          title={zipping ? 'Packing folder…' : 'Send a folder (packed as zip)'}
+          disabled={!connected || transferring || zipping}
+        >
+          <FolderIcon className="text-xl" />
         </button>
         <Input
           value={draft}
