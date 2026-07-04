@@ -8,10 +8,10 @@ import {
   CheckIcon,
   CopyIcon,
   DownloadIcon,
-  FileIcon,
   PaperclipIcon,
   SendIcon,
 } from '@/components/ui/icons';
+import { FileTypeIcon } from '@/components/FileTypeIcon';
 import { cn, formatBytes, formatTime } from '@/lib/utils';
 import { linkify } from '@/lib/linkify';
 import type { Message } from '@/types';
@@ -126,14 +126,7 @@ function FileBubble({ message }: { message: Message }) {
       >
         {/* File identity */}
         <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg',
-              sent ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-700',
-            )}
-          >
-            <FileIcon />
-          </div>
+          <FileTypeIcon file={file} />
           <div className="min-w-0">
             <p className="truncate font-medium">{file.name}</p>
             <p className={cn('text-xs', sent ? 'text-brand-100' : 'text-slate-400')}>

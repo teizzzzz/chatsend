@@ -12,11 +12,11 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-🚧 **Phase 3 — File transfer works.** Files travel peer-to-peer over the
-DataChannel in 64 KiB chunks with backpressure: the receiver must accept the
-offer first, both sides see live progress, either side can cancel, the sender
-can retry after a failure or rejection, and the receiver downloads the
-reassembled file. All transfers land in the local history.
+🚧 **Phase 4 — MVP feature-complete.** Pairing, text messaging, chunked P2P
+file transfer with accept/decline + progress + retry, and a full history page:
+filter chips (all / sent / received / images / videos / documents / failed),
+per-device filtering, search, per-record delete, and clear-all — all backed by
+IndexedDB. Next up: polish (drag & drop, multi-file queue, QR join).
 
 ## Tech stack
 
@@ -77,6 +77,7 @@ src/
 │   └── SettingsPage.tsx  #   device name, theme, clear data
 ├── components/           # Reusable UI
 │   ├── Layout.tsx        #   app shell (header + centered column)
+│   ├── FileTypeIcon.tsx  #   category-coloured file icon (chat + history)
 │   └── ui/               #   Button, Card, Input, icons
 ├── store/                # Zustand stores
 │   ├── useAppStore.ts    #   device identity + theme (persisted)
@@ -84,6 +85,7 @@ src/
 ├── lib/                  # Framework-agnostic helpers
 │   ├── utils.ts          #   ids, codes, byte/time formatting, cn()
 │   ├── linkify.tsx       #   URL auto-linking for message text
+│   ├── fileKind.ts       #   MIME/extension → image/video/document/… category
 │   └── useTheme.ts       #   applies light/dark/system to <html>
 └── services/             # Connection & transport layer (React-free)
     ├── signaling.ts      #   WebSocket client for the signalling server
@@ -123,7 +125,8 @@ The four core entities (defined in `src/types/index.ts`):
       IndexedDB history with search / delete / clear and a save-history toggle.
 - [x] **Phase 3** — Chunked file transfer: offer → accept/decline, live
       progress both sides, cancel, retry, download on completion.
-- [ ] **Phase 4** — History page filters (direction / file type / failed).
+- [x] **Phase 4** — History filters (direction / image / video / document /
+      failed), device filter, file-type icons, status badges.
 - [ ] **Phase 5** — Polish: drag & drop, multi-file queue, QR-code join,
       mobile fit & finish.
 

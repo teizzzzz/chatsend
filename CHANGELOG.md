@@ -4,6 +4,25 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.5.0] — Phase 4: History filters
+
+The history page now covers the full req §7.4 / §5.5 feature set. Verified
+end-to-end with an automated two-browser test that builds a real mixed
+history (text, image, PDF, declined archive) and exercises every filter.
+
+### Added
+
+- **Filter chips**: All / Sent / Received / Images / Videos / Documents /
+  Failed (the Failed chip groups failed + declined + cancelled outcomes,
+  each shown with its own status badge).
+- **Device filter**: dropdown listing every peer device present in history.
+- **File categorisation** (`src/lib/fileKind.ts`): MIME-first with extension
+  fallback → image / video / audio / document / archive / other.
+- **`FileTypeIcon`** shared component: category-coloured icons used in both
+  chat file bubbles and history rows (req P1: file-type icons).
+- **Status badges** on history rows for failed / declined / cancelled
+  records; search now combines with the active filter and device.
+
 ## [0.4.0] — Phase 3: File transfer
 
 Files now move peer-to-peer. Verified end-to-end with an automated
