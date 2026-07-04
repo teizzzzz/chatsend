@@ -41,6 +41,11 @@ interface SessionState {
   messages: Message[];
   /** True while a file is being sent or received (one at a time in MVP). */
   transferring: boolean;
+  /**
+   * Six-digit code derived from both DTLS fingerprints; identical on both
+   * devices when the connection is untampered (端到端身份确认, req §6.2).
+   */
+  verificationCode: string | null;
   /** Object URLs for received files, by message id. Session-lifetime only. */
   fileUrls: Record<string, string>;
 
@@ -361,6 +366,13 @@ export const useSessionStore = create<SessionState>((set, get) => {
           // P2P link is up — the signalling socket has done its job.
           signaling?.close();
           signaling = null;
+          void peer?.verificationCode().then((code) => {
+            if (epoch !== myEpoch || !code) return;
+            set({ verificationCode: code });
+            pushSystemMessage(
+              `Verification code ${code.slice(0, 3)} ${code.slice(3)} — matches on both devices when the connection is secure`,
+            );
+          });
         },
         onClose: () => {
           if (epoch !== myEpoch) return;
@@ -469,6 +481,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       messages: [],
       transferring: false,
       fileUrls: {},
+      verificationCode: null,
     });
     return epoch;
   };
@@ -483,6 +496,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     messages: [],
     transferring: false,
     fileUrls: {},
+    verificationCode: null,
 
     async createRoom() {
       const myEpoch = beginAttempt(true);
@@ -624,6 +638,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
         messages: [],
         transferring: false,
         fileUrls: {},
+        verificationCode: null,
       });
     },
   };

@@ -266,8 +266,16 @@ function BubbleAction({
 
 export function ChatPage() {
   const navigate = useNavigate();
-  const { status, peer, messages, transferring, sendText, sendFiles, leave } =
-    useSessionStore();
+  const {
+    status,
+    peer,
+    messages,
+    transferring,
+    verificationCode,
+    sendText,
+    sendFiles,
+    leave,
+  } = useSessionStore();
   const { trustedDevices, trustDevice, untrustDevice } = useAppStore();
   const [draft, setDraft] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -356,7 +364,16 @@ export function ChatPage() {
           </p>
           <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <span className={cn('h-2 w-2 rounded-full', statusDotClass(status))} />
-            {STATUS_LABEL[status]}
+            <span>{STATUS_LABEL[status]}</span>
+            {connected && verificationCode && (
+              <span
+                className="font-mono text-slate-400"
+                title="Security verification code — identical on both devices when the connection is untampered"
+                data-testid="verification-code"
+              >
+                · {verificationCode.slice(0, 3)} {verificationCode.slice(3)}
+              </span>
+            )}
           </p>
         </div>
         {connected && peer && (

@@ -54,6 +54,11 @@ export interface PeerEvents {
   onStateChange: (state: RTCPeerConnectionState) => void;
 }
 
+function extractFingerprint(sdp: string | undefined): string | null {
+  const match = sdp?.match(/a=fingerprint:sha-256 ([0-9A-F:]+)/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
 export class PeerSession {
   private readonly pc: RTCPeerConnection;
   private channel: RTCDataChannel | null = null;
@@ -180,6 +185,26 @@ export class PeerSession {
     channel.onopen = () => this.events.onOpen();
     channel.onclose = () => this.events.onClose();
     channel.onmessage = (event) => this.events.onMessage(event.data);
+  }
+
+  /**
+   * Short authentication code derived from both DTLS certificate
+   * fingerprints (the trust anchors of the WebRTC encryption). The same
+   * six digits appear on both devices; if a man-in-the-middle intercepted
+   * the signalling, the fingerprints — and therefore the codes — differ.
+   * Order-independent via sorting. Null until both descriptions are set.
+   */
+  async verificationCode(): Promise<string | null> {
+    const local = extractFingerprint(this.pc.currentLocalDescription?.sdp);
+    const remote = extractFingerprint(this.pc.currentRemoteDescription?.sdp);
+    if (!local || !remote) return null;
+    const input = [local, remote].sort().join('|');
+    const digest = await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(input),
+    );
+    const num = new DataView(digest).getUint32(0) % 1_000_000;
+    return String(num).padStart(6, '0');
   }
 
   private async flushPendingCandidates(): Promise<void> {
