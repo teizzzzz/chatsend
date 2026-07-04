@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { pairDevices } from './helpers';
+import { test, pairDevices } from './helpers';
 
 /**
  * Resumable transfer (断点续传): interrupt a large transfer mid-flight, retry

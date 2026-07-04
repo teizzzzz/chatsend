@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Device, Message } from '@/types';
 import { parseFrame, type ChannelFrame } from '@/types/channel';
-import { SignalingClient } from '@/services/signaling';
+import { SignalingClient, defaultSignalingUrl } from '@/services/signaling';
 import { PeerSession } from '@/services/peer';
 import { ChunkAssembler, makeFileMeta, pumpFile } from '@/services/transfer';
 import { saveMessage } from '@/services/db';
@@ -93,14 +93,6 @@ function localDevice(): Device {
     lastSeenAt: Date.now(),
     trusted: false,
   };
-}
-
-function signalingUrl(): string {
-  const fromEnv = import.meta.env.VITE_SIGNALING_URL as string | undefined;
-  if (fromEnv) return fromEnv;
-  // Default: same origin under /ws (Vite dev/preview proxy handles this).
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${window.location.host}/ws`;
 }
 
 function teardownServices(): void {
@@ -450,7 +442,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
         }
       },
     });
-    return signaling.connect(signalingUrl());
+    return signaling.connect(defaultSignalingUrl());
   };
 
   /** Release everything tied to the previous session's transfers. */

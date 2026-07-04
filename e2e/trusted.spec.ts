@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { pairDevices } from './helpers';
+import { expect } from '@playwright/test';
+import { test, pairDevices } from './helpers';
 
 /**
  * Trusted devices (req §6.2): files from a trusted peer are auto-accepted;

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { BackIcon } from '@/components/ui/icons';
 import { useSessionStore } from '@/store/useSessionStore';
+import { usePresenceStore } from '@/store/usePresenceStore';
 
 /**
  * Pairing screen, driven by the session store. Two modes via `?mode=`:
@@ -21,10 +22,20 @@ export function ConnectPage() {
   const [params] = useSearchParams();
   const mode = params.get('mode') === 'join' ? 'join' : 'create';
   const codeParam = params.get('code');
+  const inviteTarget = params.get('invite');
 
   const { status, code, error, createRoom, joinRoom, leave } = useSessionStore();
+  const sendInvite = usePresenceStore((s) => s.sendInvite);
   const [joinCode, setJoinCode] = useState('');
   const [qr, setQr] = useState<string | null>(null);
+
+  // Nearby-device flow: once the room exists, invite the chosen device.
+  // Idempotent server-side, so StrictMode's double run is harmless.
+  useEffect(() => {
+    if (mode === 'create' && inviteTarget && code) {
+      sendInvite(inviteTarget, code);
+    }
+  }, [mode, inviteTarget, code, sendInvite]);
 
   // Host mode: render a QR of the join link so the other device can scan
   // instead of typing (req §5.1).

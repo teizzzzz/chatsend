@@ -8,6 +8,7 @@ import {
   SettingsIcon,
 } from '@/components/ui/icons';
 import { useAppStore } from '@/store/useAppStore';
+import { usePresenceStore } from '@/store/usePresenceStore';
 
 /**
  * Landing screen. Four primary entry points required by the MVP: create a
@@ -51,6 +52,7 @@ function Action({ icon, title, subtitle, onClick, accent }: ActionProps) {
 export function HomePage() {
   const navigate = useNavigate();
   const deviceName = useAppStore((s) => s.deviceName);
+  const nearby = usePresenceStore((s) => s.nearby);
 
   return (
     <Layout>
@@ -91,6 +93,31 @@ export function HomePage() {
             onClick={() => navigate('/settings')}
           />
         </div>
+
+        {nearby.length > 0 && (
+          <section>
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Nearby devices
+            </h2>
+            <div className="space-y-2">
+              {nearby.map((device) => (
+                <Card
+                  key={device.id}
+                  onClick={() => navigate(`/connect?mode=create&invite=${device.id}`)}
+                  className="flex cursor-pointer items-center gap-3 p-3 transition-transform active:scale-[0.99]"
+                >
+                  <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                      {device.name}
+                    </p>
+                    <p className="text-xs text-slate-400">Same network · tap to connect</p>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </Layout>
   );

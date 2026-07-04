@@ -1,5 +1,24 @@
 import type { Browser, BrowserContext, Page, ViewportSize } from '@playwright/test';
-import { expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+
+/**
+ * Contexts made via newDevice are closed after each test — the browser is
+ * shared per worker, and a leaked context would keep announcing itself to
+ * the presence system and pollute later tests' "nearby" lists.
+ */
+const createdContexts: BrowserContext[] = [];
+
+export const test = base.extend<{ _deviceCleanup: void }>({
+  _deviceCleanup: [
+    async ({}, use) => {
+      await use(undefined);
+      while (createdContexts.length > 0) {
+        await createdContexts.pop()!.close();
+      }
+    },
+    { auto: true },
+  ],
+});
 
 /**
  * Shared plumbing for the two-browser E2E tests: seed device settings into
@@ -25,6 +44,7 @@ export async function newDevice(
   viewport?: ViewportSize,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext(viewport ? { viewport } : {});
+  createdContexts.push(context);
   // Seed device identity on first load only — later navigations must keep
   // whatever the app persisted (e.g. trusted devices).
   await context.addInitScript((v: string) => {

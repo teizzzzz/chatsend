@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { newDevice, pairDevices, readRoomCode } from './helpers';
+import { expect } from '@playwright/test';
+import { test, newDevice, pairDevices, readRoomCode } from './helpers';
 
 /** Phase 1 acceptance: pairing, peer identity, disconnect, error paths. */
 

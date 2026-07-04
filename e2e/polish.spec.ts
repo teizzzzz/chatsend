@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { newDevice, pairDevices, readRoomCode } from './helpers';
+import { expect } from '@playwright/test';
+import { test, newDevice, pairDevices, readRoomCode } from './helpers';
 
 /** Phase 4/5 acceptance: history filters, QR join, queue, drag & drop. */
 

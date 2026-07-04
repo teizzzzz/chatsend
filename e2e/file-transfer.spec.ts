@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { pairDevices } from './helpers';
+import { test, pairDevices } from './helpers';
 
 /** Phase 3 acceptance: chunked transfer, confirmation, retry, integrity. */
 

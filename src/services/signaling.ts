@@ -27,6 +27,14 @@ export interface SignalingHandlers {
   onClose: () => void;
 }
 
+/** Default server URL: same origin under /ws (Vite proxies this in dev). */
+export function defaultSignalingUrl(): string {
+  const fromEnv = import.meta.env.VITE_SIGNALING_URL as string | undefined;
+  if (fromEnv) return fromEnv;
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}/ws`;
+}
+
 export class SignalingClient {
   private ws: WebSocket | null = null;
   private closedByUs = false;

@@ -30,6 +30,39 @@ const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 /** @type {Map<string, {host: import('ws').WebSocket, guest: import('ws').WebSocket | null, createdAt: number}>} */
 const rooms = new Map();
 
+/**
+ * Nearby-device presence: sockets bucketed by client IP. Devices behind the
+ * same NAT / on the same LAN share a public IP, so they see each other in
+ * the "nearby" list — the browser-compatible stand-in for mDNS discovery.
+ * @type {Map<string, Set<import('ws').WebSocket>>}
+ */
+const presence = new Map();
+
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (typeof fwd === 'string' && fwd.length > 0) return fwd.split(',')[0].trim();
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
+function broadcastNearby(ip) {
+  const bucket = presence.get(ip);
+  if (!bucket) return;
+  for (const member of bucket) {
+    const devices = [...bucket]
+      .filter((other) => other !== member && other.device)
+      .map((other) => other.device);
+    send(member, { type: 'nearby', devices });
+  }
+}
+
+function leavePresence(ws) {
+  const bucket = presence.get(ws.ip);
+  if (!bucket) return;
+  bucket.delete(ws);
+  if (bucket.size === 0) presence.delete(ws.ip);
+  else broadcastNearby(ws.ip);
+}
+
 function send(ws, message) {
   if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
 }
@@ -135,6 +168,32 @@ function handleMessage(ws, raw) {
       break;
     }
 
+    case 'announce': {
+      const device = sanitizeDevice(message.device);
+      if (!device) return sendError(ws, 'invalid-message', 'Missing device info.');
+      ws.device = device;
+      let bucket = presence.get(ws.ip);
+      if (!bucket) {
+        bucket = new Set();
+        presence.set(ws.ip, bucket);
+      }
+      bucket.add(ws);
+      broadcastNearby(ws.ip);
+      break;
+    }
+
+    case 'invite': {
+      // Relay a connect invitation to a device on the same network only.
+      if (!ws.device) return sendError(ws, 'invalid-message', 'Announce first.');
+      const code = String(message.code || '').toUpperCase().trim();
+      const targetId = String(message.targetId || '');
+      if (!rooms.has(code)) return sendError(ws, 'room-not-found', 'Invite room not found.');
+      const bucket = presence.get(ws.ip);
+      const target = bucket && [...bucket].find((m) => m.device?.id === targetId);
+      if (target) send(target, { type: 'invite', code, device: ws.device });
+      break;
+    }
+
     default:
       sendError(ws, 'invalid-message', `Unknown message type: ${String(message.type)}`);
   }
@@ -199,10 +258,17 @@ async function handleHttp(req, res) {
 const server = createServer(handleHttp);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  ws.ip = clientIp(req);
   ws.on('message', (raw) => handleMessage(ws, raw));
-  ws.on('close', () => leaveRoom(ws));
-  ws.on('error', () => leaveRoom(ws));
+  ws.on('close', () => {
+    leaveRoom(ws);
+    leavePresence(ws);
+  });
+  ws.on('error', () => {
+    leaveRoom(ws);
+    leavePresence(ws);
+  });
 });
 
 // Expire stale rooms so abandoned codes can't be joined forever.

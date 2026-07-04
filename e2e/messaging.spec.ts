@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { pairDevices } from './helpers';
+import { expect } from '@playwright/test';
+import { test, pairDevices } from './helpers';
 
 /** Phase 2 acceptance: text over the DataChannel + IndexedDB history. */
 
