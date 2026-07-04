@@ -48,8 +48,11 @@ interface SessionState {
   joinRoom: (code: string) => Promise<void>;
   /** Send a text message over the DataChannel. False if not connected. */
   sendText: (content: string) => boolean;
-  /** Offer a file to the peer. Bytes flow only after they accept. */
-  sendFile: (file: File) => void;
+  /**
+   * Queue one or more files to send. Files are offered one at a time: the
+   * next offer goes out when the current transfer reaches a terminal state.
+   */
+  sendFiles: (files: File[]) => void;
   /** Receiver: accept a pending file offer. */
   acceptFile: (messageId: string) => void;
   /** Receiver: decline a pending file offer. */
@@ -72,6 +75,8 @@ const outgoingFiles = new Map<string, File>();
 const cancelledSends = new Set<string>();
 /** The one in-flight incoming transfer (single transfer at a time in MVP). */
 let activeReceive: { id: string; assembler: ChunkAssembler } | null = null;
+/** Files waiting to be offered (multi-file selection / drag & drop). */
+const sendQueue: File[] = [];
 
 function localDevice(): Device {
   const { deviceId, deviceName } = useAppStore.getState();
@@ -133,6 +138,48 @@ export const useSessionStore = create<SessionState>((set, get) => {
     updateMessage(id, { status: 'completed', progress: 100, completedAt: Date.now() }, true);
   };
 
+  /** An outgoing file that hasn't reached a terminal state yet? */
+  const hasActiveOutgoingFile = (): boolean =>
+    get().messages.some(
+      (m) =>
+        m.type === 'file' &&
+        m.direction === 'sent' &&
+        (m.status === 'pending' || m.status === 'transferring'),
+    );
+
+  /** Offer the file without queue checks — callers guard. */
+  const offerFile = (file: File): void => {
+    const { sessionId, peer: peerDevice } = get();
+    const id = createId('msg_');
+    const meta = makeFileMeta(file);
+    if (!sendFrame({ v: 1, type: 'file-offer', id, file: meta })) return;
+    outgoingFiles.set(id, file);
+    pushMessage({
+      id,
+      sessionId: sessionId ?? 'none',
+      type: 'file',
+      direction: 'sent',
+      senderDeviceId: localDevice().id,
+      receiverDeviceId: peerDevice?.id ?? 'unknown',
+      file: meta,
+      status: 'pending',
+      progress: 0,
+      createdAt: Date.now(),
+      peerDeviceName: peerDevice?.name,
+    });
+  };
+
+  /** Pop the next queued file once nothing is pending or in flight. */
+  const offerNextQueued = (): void => {
+    if (get().status !== 'connected' || !peer) {
+      sendQueue.length = 0;
+      return;
+    }
+    if (get().transferring || hasActiveOutgoingFile()) return;
+    const file = sendQueue.shift();
+    if (file) offerFile(file);
+  };
+
   /** Sender pump: reads the file chunk by chunk with backpressure. */
   const runSend = async (id: string, file: File, myEpoch: number): Promise<void> => {
     const result = await pumpFile(
@@ -154,6 +201,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     } else {
       updateMessage(id, { status: 'failed', error: 'Transfer failed — connection dropped.' }, true);
     }
+    offerNextQueued();
   };
 
   const pushSystemMessage = (content: string): void => {
@@ -235,6 +283,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
         if (!outgoingFiles.has(frame.id)) break;
         updateMessage(frame.id, { status: 'rejected' }, true);
         pushSystemMessage('Peer declined the file');
+        offerNextQueued();
         break;
       }
 
@@ -251,6 +300,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
           activeReceive = null;
           set({ transferring: false });
         }
+        offerNextQueued();
         break;
       }
     }
@@ -297,7 +347,9 @@ export const useSessionStore = create<SessionState>((set, get) => {
             const wasConnected = get().status === 'connected';
             set({
               status: wasConnected ? 'disconnected' : 'failed',
-              error: wasConnected ? null : 'Could not establish a peer connection.',
+              error: wasConnected
+                ? null
+                : 'Could not establish a direct connection. Make sure both devices are online — the same Wi-Fi network works best.',
             });
             if (wasConnected) pushSystemMessage('Connection lost');
           }
@@ -359,6 +411,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
     outgoingFiles.clear();
     cancelledSends.clear();
     activeReceive = null;
+    sendQueue.length = 0;
     for (const url of Object.values(get().fileUrls)) URL.revokeObjectURL(url);
   };
 
@@ -443,28 +496,10 @@ export const useSessionStore = create<SessionState>((set, get) => {
       return true;
     },
 
-    sendFile(file: File) {
-      const { status, transferring, sessionId, peer: peerDevice } = get();
-      if (status !== 'connected' || transferring || !peer) return;
-
-      const id = createId('msg_');
-      const meta = makeFileMeta(file);
-      if (!sendFrame({ v: 1, type: 'file-offer', id, file: meta })) return;
-      outgoingFiles.set(id, file);
-
-      pushMessage({
-        id,
-        sessionId: sessionId ?? 'none',
-        type: 'file',
-        direction: 'sent',
-        senderDeviceId: localDevice().id,
-        receiverDeviceId: peerDevice?.id ?? 'unknown',
-        file: meta,
-        status: 'pending',
-        progress: 0,
-        createdAt: Date.now(),
-        peerDeviceName: peerDevice?.name,
-      });
+    sendFiles(files: File[]) {
+      if (get().status !== 'connected' || !peer || files.length === 0) return;
+      sendQueue.push(...files);
+      offerNextQueued();
     },
 
     acceptFile(messageId: string) {
@@ -501,6 +536,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
         cancelledSends.add(messageId);
         if (message.status === 'pending') {
           updateMessage(messageId, { status: 'cancelled' }, true);
+          offerNextQueued();
         }
       } else {
         if (activeReceive?.id === messageId) activeReceive = null;
@@ -514,6 +550,7 @@ export const useSessionStore = create<SessionState>((set, get) => {
       const message = findMessage(messageId);
       const file = outgoingFiles.get(messageId);
       if (!message?.file || !file || status !== 'connected' || transferring) return;
+      if (hasActiveOutgoingFile()) return; // one outgoing offer at a time
       cancelledSends.delete(messageId);
       if (!sendFrame({ v: 1, type: 'file-offer', id: messageId, file: message.file })) return;
       updateMessage(messageId, { status: 'pending', progress: 0, error: undefined }, true);

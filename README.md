@@ -12,11 +12,11 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-🚧 **Phase 4 — MVP feature-complete.** Pairing, text messaging, chunked P2P
-file transfer with accept/decline + progress + retry, and a full history page:
-filter chips (all / sent / received / images / videos / documents / failed),
-per-device filtering, search, per-record delete, and clear-all — all backed by
-IndexedDB. Next up: polish (drag & drop, multi-file queue, QR join).
+✅ **MVP complete (Phase 5).** Pairing (code or QR scan), text messaging,
+chunked P2P file transfer with accept/decline + progress + retry, multi-file
+queue, drag & drop, full history with filters — verified end-to-end by
+automated two-browser tests at every phase. See the roadmap for what's next
+(v0.2 ideas: trusted devices, resumable transfers, LAN discovery).
 
 ## Tech stack
 
@@ -127,7 +127,12 @@ The four core entities (defined in `src/types/index.ts`):
       progress both sides, cancel, retry, download on completion.
 - [x] **Phase 4** — History filters (direction / image / video / document /
       failed), device filter, file-type icons, status badges.
-- [ ] **Phase 5** — Polish: drag & drop, multi-file queue, QR-code join,
-      mobile fit & finish.
+- [x] **Phase 5** — Polish: drag & drop, multi-file queue, QR-code join
+      (scan → auto-join link), mobile viewport/safe-area fit, clearer errors.
+
+### v0.2 candidates (not started)
+
+Trusted devices & auto-accept, resumable transfers, folder transfer, LAN
+auto-discovery, native desktop/mobile shells, calendar-view history.
 
 See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each phase.

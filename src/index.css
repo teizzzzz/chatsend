@@ -12,6 +12,25 @@ body,
   height: 100%;
 }
 
+/* Mobile browsers: track the *visible* viewport so the composer isn't hidden
+   behind collapsing URL bars. */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
+/* iOS zooms the page when focusing inputs with font-size < 16px. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }

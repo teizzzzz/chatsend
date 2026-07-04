@@ -263,9 +263,11 @@ function BubbleAction({
 
 export function ChatPage() {
   const navigate = useNavigate();
-  const { status, peer, messages, transferring, sendText, sendFile, leave } =
+  const { status, peer, messages, transferring, sendText, sendFiles, leave } =
     useSessionStore();
   const [draft, setDraft] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0);
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const connected = status === 'connected';
@@ -284,8 +286,44 @@ export function ChatPage() {
     navigate('/');
   };
 
+  // Drag & drop anywhere on the chat surface. Depth counter because
+  // dragenter/dragleave also fire on every child element.
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragOver(true);
+  };
+  const onDragLeave = () => {
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragOver(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragOver(false);
+    if (!connected) return;
+    const files = [...e.dataTransfer.files];
+    if (files.length) sendFiles(files);
+  };
+
   return (
     <Layout bare>
+      <div
+        data-dropzone
+        className="relative flex min-h-0 flex-1 flex-col"
+        onDragEnter={onDragEnter}
+        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+      {dragOver && connected && (
+        <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-brand-500 bg-brand-50/90 dark:bg-brand-900/40">
+          <p className="text-sm font-medium text-brand-700 dark:text-brand-300">
+            Drop files to send
+          </p>
+        </div>
+      )}
       {/* Header */}
       <header className="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
         <button
@@ -335,15 +373,16 @@ export function ChatPage() {
         )}
       </div>
 
-      {/* Composer */}
-      <div className="flex items-center gap-2 border-t border-slate-200 p-3 dark:border-slate-800">
+      {/* Composer (bottom padding respects the home-indicator safe area) */}
+      <div className="flex items-center gap-2 border-t border-slate-200 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] dark:border-slate-800">
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) sendFile(file);
+            const files = [...(e.target.files ?? [])];
+            if (files.length) sendFiles(files);
             e.target.value = ''; // allow re-picking the same file
           }}
         />
@@ -377,6 +416,7 @@ export function ChatPage() {
         >
           <SendIcon className="text-lg" />
         </Button>
+      </div>
       </div>
     </Layout>
   );

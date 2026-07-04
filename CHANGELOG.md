@@ -4,6 +4,32 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.6.0] — Phase 5: Experience polish (MVP complete)
+
+Verified end-to-end with automated two-browser tests (including a mobile
+viewport), plus full regression of the Phase 2/3 suites.
+
+### Added
+
+- **Multi-file queue**: pick several files (or drop several) and they're
+  offered one at a time — the next offer goes out automatically when the
+  current transfer completes, fails, is declined, or is cancelled.
+- **Drag & drop** (req P1): drop files anywhere on the chat surface to send;
+  dashed-border overlay while dragging.
+- **QR-code pairing** (req §5.1): the host screen shows a QR encoding
+  `/connect?mode=join&code=…`; scanning it opens the app and auto-joins the
+  room. Uses the `qrcode` package.
+- **Mobile fit**: `100dvh` viewport tracking (URL-bar collapse),
+  `viewport-fit=cover` + safe-area padding under the composer, 16px inputs
+  on small screens to stop iOS focus-zoom, theme-color meta.
+
+### Changed
+
+- Store API: `sendFile(file)` → `sendFiles(files[])` with queueing; retry
+  guards against a second concurrent outgoing offer.
+- Peer-connection failure message now explains the likely fix ("same Wi-Fi
+  network works best") per req §6.4.
+
 ## [0.5.0] — Phase 4: History filters
 
 The history page now covers the full req §7.4 / §5.5 feature set. Verified

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { Layout } from '@/components/Layout';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,17 +10,44 @@ import { useSessionStore } from '@/store/useSessionStore';
 
 /**
  * Pairing screen, driven by the session store. Two modes via `?mode=`:
- *  - create: request a room, display the 6-character code, wait for a guest.
- *  - join: enter the peer's code and connect.
+ *  - create: request a room, display the 6-character code + a QR code that
+ *    encodes the join link, wait for a guest.
+ *  - join: enter the peer's code (or arrive with ?code= from a scanned QR,
+ *    which auto-joins) and connect.
  * Both modes auto-navigate to /chat once the DataChannel opens.
  */
 export function ConnectPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const mode = params.get('mode') === 'join' ? 'join' : 'create';
+  const codeParam = params.get('code');
 
   const { status, code, error, createRoom, joinRoom, leave } = useSessionStore();
   const [joinCode, setJoinCode] = useState('');
+  const [qr, setQr] = useState<string | null>(null);
+
+  // Host mode: render a QR of the join link so the other device can scan
+  // instead of typing (req §5.1).
+  useEffect(() => {
+    if (mode !== 'create' || !code) {
+      setQr(null);
+      return;
+    }
+    const joinUrl = `${window.location.origin}/connect?mode=join&code=${code}`;
+    QRCode.toDataURL(joinUrl, { margin: 1, width: 192 })
+      .then(setQr)
+      .catch(() => setQr(null));
+  }, [mode, code]);
+
+  // Scanned-QR path: /connect?mode=join&code=ABC123 joins immediately.
+  // Gate on live store status (not a ref): the unmount cleanup calls leave(),
+  // so under StrictMode's double mount the second run re-joins cleanly.
+  useEffect(() => {
+    if (mode !== 'join' || codeParam?.length !== 6) return;
+    if (useSessionStore.getState().status !== 'idle') return;
+    setJoinCode(codeParam.toUpperCase());
+    void joinRoom(codeParam);
+  }, [mode, codeParam, joinRoom]);
 
   // Host mode: create the room on arrival; abandon it if the user leaves
   // before a connection is made (StrictMode's double mount is handled by the
@@ -61,8 +89,15 @@ export function ConnectPage() {
                   ······
                 </p>
               )}
+              {qr && (
+                <img
+                  src={qr}
+                  alt="QR code to join"
+                  className="mx-auto mt-4 h-40 w-40 rounded-lg bg-white p-1"
+                />
+              )}
               <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-                Enter this code on the other device to connect.
+                Enter this code on the other device — or scan the QR code.
               </p>
             </Card>
 
