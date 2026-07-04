@@ -12,11 +12,11 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-✅ **MVP complete (Phase 5).** Pairing (code or QR scan), text messaging,
-chunked P2P file transfer with accept/decline + progress + retry, multi-file
-queue, drag & drop, full history with filters — verified end-to-end by
-automated two-browser tests at every phase. See the roadmap for what's next
-(v0.2 ideas: trusted devices, resumable transfers, LAN discovery).
+✅ **MVP complete + production-ready (Phase 6).** Pairing (code or QR scan),
+text messaging, chunked P2P file transfer with accept/decline + progress +
+retry, multi-file queue, drag & drop, full history with filters. A 12-test
+Playwright suite runs the whole stack (two browsers + real WebRTC) in CI on
+every push, and deployment is one Node process or one Docker image.
 
 ## Tech stack
 
@@ -50,10 +50,55 @@ npm run build    # type-check + production build
 npm run preview  # preview the production build
 npm run lint     # lint
 npm run typecheck
+npm run test:e2e # Playwright E2E suite (see Testing)
 ```
 
 The frontend connects to `ws(s)://<origin>/ws` by default (the Vite dev/preview
 proxy forwards it to port 3001); set `VITE_SIGNALING_URL` to point elsewhere.
+
+## Testing
+
+The E2E suite (`e2e/`) drives **two real browser contexts** through the whole
+stack — Vite, the signalling server, and an actual WebRTC DataChannel between
+the pages. It covers pairing, disconnects, error paths, bidirectional text,
+history persistence/search/filters, a SHA-256-verified 2 MB file transfer,
+decline→retry, the multi-file queue, drag & drop, and QR auto-join.
+
+```bash
+npx playwright install chromium   # once
+npm run test:e2e
+```
+
+Playwright starts both dev servers automatically (`webServer` config). To use
+a pre-installed Chromium, set `CHROMIUM_PATH=/path/to/chrome`. CI runs the
+same suite on every push (`.github/workflows/ci.yml`).
+
+## Deployment
+
+`server/index.js` doubles as a static file server for `dist/`, so production
+is a single Node process:
+
+```bash
+npm ci && npm run build
+node server/index.js          # serves the app + /ws signalling on :3001
+```
+
+Or with Docker:
+
+```bash
+docker build -t chatsend .
+docker run -p 3001:3001 chatsend
+```
+
+Two production notes:
+
+- **HTTPS is required.** Browsers only allow WebRTC (and clipboard, etc.) on
+  secure origins. Put the process behind a TLS-terminating proxy (Caddy,
+  nginx, or any PaaS); WebSocket upgrade for `/ws` must be forwarded.
+- **TURN for strict NATs.** Public STUN is the default and works on most
+  networks (and always on the same LAN). For peers behind symmetric NAT,
+  provide a TURN server at build time:
+  `VITE_ICE_SERVERS='[{"urls":"turn:turn.example.com:3478","username":"u","credential":"c"}]' npm run build`
 
 ## Project structure
 
@@ -129,6 +174,9 @@ The four core entities (defined in `src/types/index.ts`):
       failed), device filter, file-type icons, status badges.
 - [x] **Phase 5** — Polish: drag & drop, multi-file queue, QR-code join
       (scan → auto-join link), mobile viewport/safe-area fit, clearer errors.
+- [x] **Phase 6** — Engineering: in-repo Playwright E2E suite, GitHub Actions
+      CI, single-process production server (static + /ws), Dockerfile,
+      configurable ICE/TURN servers.
 
 ### v0.2 candidates (not started)
 

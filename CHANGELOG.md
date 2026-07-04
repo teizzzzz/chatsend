@@ -4,6 +4,27 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.7.0] — Phase 6: Test suite, CI, production deployment
+
+### Added
+
+- **In-repo E2E suite** (`e2e/`, `playwright.config.ts`): 12 Playwright
+  tests covering pairing / disconnect / error paths, bidirectional text +
+  linkify, history persistence + search + delete + clear, SHA-256-verified
+  2 MB file transfer, decline→retry, multi-file queue serialisation,
+  drag & drop, QR auto-join, and history filter chips + device filter.
+  `npm run test:e2e`; Playwright boots both dev servers itself.
+- **CI** (`.github/workflows/ci.yml`): lint → build → full E2E suite with
+  real Chromium on every push and PR; report uploaded on failure.
+- **Production serving**: `server/index.js` now also serves `dist/` (SPA
+  fallback, immutable caching for hashed assets) on the same port as `/ws`,
+  so production is one Node process. `STATIC_DIR` overrides the path.
+- **Dockerfile** (+`.dockerignore`): multi-stage build → small runtime image
+  running the combined server.
+- **Configurable ICE servers**: `VITE_ICE_SERVERS` (JSON array) lets a
+  deployment add TURN for symmetric-NAT peers; defaults to public STUN.
+- README sections: Testing and Deployment (HTTPS requirement, TURN note).
+
 ## [0.6.0] — Phase 5: Experience polish (MVP complete)
 
 Verified end-to-end with automated two-browser tests (including a mobile

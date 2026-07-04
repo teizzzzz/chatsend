@@ -10,8 +10,16 @@
  * It never sees file bytes or chat content: once the WebRTC DataChannel is
  * open the clients close their signalling sockets and the room is deleted.
  *
+ * In production it also serves the built frontend from ../dist on the same
+ * port, so one process (behind a TLS-terminating reverse proxy) is the whole
+ * deployment. In dev, Vite serves the app and proxies /ws here instead.
+ *
  * Protocol: JSON messages mirroring src/types/signaling.ts — keep in sync.
  */
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { extname, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -132,7 +140,64 @@ function handleMessage(ws, raw) {
   }
 }
 
-const wss = new WebSocketServer({ port: PORT, path: '/ws' });
+// ---------------------------------------------------------------------------
+// Static frontend (production). Serves ../dist with an SPA fallback; harmless
+// in dev where dist may not exist and Vite serves the app anyway.
+// ---------------------------------------------------------------------------
+
+const DIST_DIR =
+  process.env.STATIC_DIR ?? join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.txt': 'text/plain; charset=utf-8',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+};
+
+async function handleHttp(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.writeHead(405).end();
+    return;
+  }
+  const pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (pathname.includes('..')) {
+    res.writeHead(400).end();
+    return;
+  }
+  // Real asset paths get the asset; everything else (SPA routes like
+  // /connect, /history) falls back to index.html.
+  const assetPath = extname(pathname)
+    ? join(DIST_DIR, pathname)
+    : join(DIST_DIR, 'index.html');
+  try {
+    const body = await readFile(assetPath);
+    res.writeHead(200, {
+      'content-type': MIME[extname(assetPath)] ?? 'application/octet-stream',
+      'cache-control': pathname.startsWith('/assets/')
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache',
+    });
+    res.end(req.method === 'HEAD' ? undefined : body);
+  } catch {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    res.end(
+      extname(pathname)
+        ? 'Not found'
+        : 'ChatSend signalling server is running, but no frontend build was found (run `npm run build`).',
+    );
+  }
+}
+
+const server = createServer(handleHttp);
+const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
   ws.on('message', (raw) => handleMessage(ws, raw));
@@ -152,4 +217,8 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-console.log(`ChatSend signalling server listening on ws://localhost:${PORT}/ws`);
+server.listen(PORT, () => {
+  console.log(
+    `ChatSend server listening on http://localhost:${PORT} (signalling at /ws)`,
+  );
+});

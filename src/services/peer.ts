@@ -12,9 +12,28 @@ import type { SignalPayload } from '@/types/signaling';
  * the offer. The guest answers and receives the channel via `ondatachannel`.
  */
 
-const ICE_SERVERS: RTCIceServer[] = [
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
 ];
+
+/**
+ * ICE servers come from VITE_ICE_SERVERS when set (a JSON array, e.g.
+ * '[{"urls":"turn:turn.example.com","username":"u","credential":"c"}]') so a
+ * deployment can add a TURN server for symmetric-NAT peers without touching
+ * code. Falls back to public STUN.
+ */
+function iceServers(): RTCIceServer[] {
+  const raw = import.meta.env.VITE_ICE_SERVERS as string | undefined;
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as RTCIceServer[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      console.warn('VITE_ICE_SERVERS is not valid JSON; using default STUN.');
+    }
+  }
+  return DEFAULT_ICE_SERVERS;
+}
 
 /** Single ordered, reliable channel for both chat and file chunks. */
 const CHANNEL_LABEL = 'chatsend';
@@ -46,7 +65,7 @@ export class PeerSession {
     private readonly sendSignal: (payload: SignalPayload) => void,
     private readonly events: PeerEvents,
   ) {
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    this.pc = new RTCPeerConnection({ iceServers: iceServers() });
 
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {

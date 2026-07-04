@@ -15,4 +15,11 @@ module.exports = {
       { allowConstantExport: true },
     ],
   },
+  overrides: [
+    {
+      // Playwright tests and config run in Node.
+      files: ['e2e/**/*.ts', 'playwright.config.ts'],
+      env: { node: true },
+    },
+  ],
 };
