@@ -5,6 +5,7 @@ import type {
   SignalPayload,
   SignalingErrorCode,
 } from '@/types/signaling';
+import { useAppStore } from '@/store/useAppStore';
 
 /**
  * Thin WebSocket client for the signalling server (server/index.js).
@@ -27,8 +28,16 @@ export interface SignalingHandlers {
   onClose: () => void;
 }
 
-/** Default server URL: same origin under /ws (Vite proxies this in dev). */
+/**
+ * Server URL resolution, most specific first:
+ *  1. user-configured server (Settings — required in the desktop shell,
+ *     where the page origin isn't the server)
+ *  2. VITE_SIGNALING_URL baked in at build time
+ *  3. same origin under /ws (the web default; Vite proxies this in dev)
+ */
 export function defaultSignalingUrl(): string {
+  const fromSettings = useAppStore.getState().serverUrl;
+  if (fromSettings) return fromSettings;
   const fromEnv = import.meta.env.VITE_SIGNALING_URL as string | undefined;
   if (fromEnv) return fromEnv;
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';

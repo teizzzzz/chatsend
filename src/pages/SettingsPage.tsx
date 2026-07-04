@@ -52,9 +52,13 @@ export function SettingsPage() {
     setSaveHistory,
     trustedDevices,
     untrustDevice,
+    serverUrl,
+    setServerUrl,
   } = useAppStore();
   const [nameDraft, setNameDraft] = useState(deviceName);
+  const [serverDraft, setServerDraft] = useState(serverUrl);
   const saved = nameDraft.trim() === deviceName;
+  const serverSaved = serverDraft.trim() === serverUrl;
 
   const handleClearHistory = () => {
     if (window.confirm('Delete all transfer history? This cannot be undone.')) {
@@ -97,6 +101,22 @@ export function SettingsPage() {
                 {t.label}
               </button>
             ))}
+          </div>
+        </Section>
+
+        <Section
+          title="Server"
+          description="Signalling server URL. Leave empty to use this page's origin (web default); the desktop app needs an explicit URL, e.g. wss://chatsend.example.com/ws."
+        >
+          <div className="flex gap-2">
+            <Input
+              value={serverDraft}
+              onChange={(e) => setServerDraft(e.target.value)}
+              placeholder="wss://… (optional)"
+            />
+            <Button onClick={() => setServerUrl(serverDraft)} disabled={serverSaved}>
+              Save
+            </Button>
           </div>
         </Section>
 
@@ -155,7 +175,7 @@ export function SettingsPage() {
         </Section>
 
         <p className="pt-2 text-center text-xs text-slate-400">
-          ChatSend v0.8.0 · MVP
+          ChatSend v0.9.0
         </p>
       </div>
     </Layout>

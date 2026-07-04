@@ -23,12 +23,19 @@ interface AppState {
    * trusted device are accepted automatically.
    */
   trustedDevices: Record<string, { name: string; trustedAt: number }>;
+  /**
+   * Custom signalling server URL (e.g. wss://chatsend.example.com/ws).
+   * Required in the desktop shell, where the page origin isn't the server;
+   * empty means same-origin /ws (the web default).
+   */
+  serverUrl: string;
 
   setDeviceName: (name: string) => void;
   setTheme: (theme: ThemeMode) => void;
   setSaveHistory: (on: boolean) => void;
   trustDevice: (id: string, name: string) => void;
   untrustDevice: (id: string) => void;
+  setServerUrl: (url: string) => void;
 }
 
 /** A friendly default device name so first-run isn't blank. */
@@ -47,6 +54,7 @@ export const useAppStore = create<AppState>()(
       theme: 'system',
       saveHistory: true,
       trustedDevices: {},
+      serverUrl: '',
 
       setDeviceName: (name) => set({ deviceName: name.trim() || defaultDeviceName() }),
       setTheme: (theme) => set({ theme }),
@@ -61,6 +69,7 @@ export const useAppStore = create<AppState>()(
           delete rest[id];
           return { trustedDevices: rest };
         }),
+      setServerUrl: (url) => set({ serverUrl: url.trim() }),
     }),
     {
       name: 'chatsend.settings',

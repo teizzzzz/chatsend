@@ -12,12 +12,14 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-✅ **MVP complete + production-ready (Phase 7).** Pairing (code or QR scan),
-text messaging, chunked P2P file transfer with accept/decline + progress +
-retry, multi-file queue, drag & drop, full history with filters, and PWA
-install mode (offline app shell). A 14-test Playwright suite runs the whole
-stack (two browsers + real WebRTC) in CI on every push, and deployment is one
-Node process or one Docker image.
+✅ **v0.2 feature set (Phase 11).** Everything from the MVP — pairing by code
+/ QR / nearby list, text messaging, chunked P2P file transfer with
+accept/decline + progress + retry, multi-file queue, drag & drop, history
+with filters, PWA install mode — plus **resumable transfers**, **trusted
+devices with auto-accept**, **same-network device discovery**, and a Tauri
+desktop shell. A 19-test Playwright suite runs the whole stack (two browsers
++ real WebRTC) in CI on every push; deployment is one Node process or one
+Docker image.
 
 ## Tech stack
 
@@ -66,6 +68,10 @@ history persistence/search/filters, a SHA-256-verified 2 MB file transfer,
 decline→retry, the multi-file queue, drag & drop, QR auto-join, and the PWA
 (manifest metadata + service-worker offline shell against the production
 server — build first: `npm run build`).
+
+It also covers resumable transfers (a 120 MB transfer cancelled mid-flight
+resumes from the partial copy), trusted-device auto-accept, and nearby
+discovery + invite pairing.
 
 ```bash
 npx playwright install chromium   # once
@@ -183,10 +189,20 @@ The four core entities (defined in `src/types/index.ts`):
 - [x] **Phase 7** — PWA install mode (req §4): manifest + icons (incl.
       maskable), auto-updating service worker precaching the app shell,
       verified offline load in E2E.
+- [x] **Phase 8** — Resumable transfers (断点续传): interrupted transfers
+      retry from the receiver's partial copy, SHA-256-verified across the
+      resume boundary.
+- [x] **Phase 9** — Trusted devices (req §6.2): auto-accept from trusted
+      peers, persisted, managed in Settings.
+- [x] **Phase 10** — Nearby-device discovery: same-network devices appear on
+      the home screen; one tap sends an invitation and pairs.
+- [x] **Phase 11** — Desktop shell (Tauri v2, `src-tauri/`) + configurable
+      server URL in Settings; mobile store path documented
+      (see `docs/native-shells.md`).
 
-### v0.2 candidates (not started)
+### Later candidates
 
-Trusted devices & auto-accept, resumable transfers, folder transfer, LAN
-auto-discovery, native desktop/mobile shells, calendar-view history.
+Folder transfer, PIN verification, device blocklist, calendar-view history,
+store-distributed mobile builds.
 
 See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each phase.

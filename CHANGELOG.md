@@ -4,6 +4,42 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.9.0] — Phases 8–11: v0.2 feature set
+
+### Phase 8 — Resumable transfers (断点续传)
+
+- `file-accept` frames carry a byte offset; the receiver stashes partial
+  chunks on cancel / failure / connection loss and a retried offer resumes
+  from them ("Resuming transfer from N%"). Verified E2E with a 120 MB
+  position-dependent payload SHA-256-checked across the resume boundary.
+- Channel close now cleanly fails in-flight incoming transfers (previously
+  stuck at 'transferring') while keeping their bytes for resume.
+
+### Phase 9 — Trusted devices (req §6.2)
+
+- Persisted trusted-devices list; offers from a trusted peer auto-accept
+  with a system message. Trust/untrust from the chat header; manage and
+  revoke in Settings. Multi-file queues auto-accept sequentially.
+
+### Phase 10 — Nearby-device discovery
+
+- Signalling server buckets presence connections by client IP: devices on
+  the same network see each other in a "Nearby devices" home-screen section
+  (the browser-compatible stand-in for LAN mDNS).
+- One tap creates a room and relays an invitation; the invitee gets an
+  Accept/Dismiss banner on any page and pairing completes end-to-end.
+- Long-lived presence socket with quiet reconnect; re-announces on rename.
+
+### Phase 11 — Desktop shell + configurable server
+
+- Tauri v2 scaffold (`src-tauri/`): a thin native window around the built
+  frontend; `npm run desktop:dev` / `desktop:build`. Debug binary compiled
+  as verification; installers are built per-OS (see docs/native-shells.md).
+- Settings → Server: custom signalling URL (used by desktop builds, or any
+  deployment where the app isn't served by the signalling host).
+- `docs/native-shells.md`: desktop build guide + documented Capacitor path
+  for store-distributed mobile builds (PWA already covers mobile MVP).
+
 ## [0.8.0] — Phase 7: PWA install mode
 
 Completes the last open item of the MVP platform scope (req §4: PWA 安装模式).

@@ -10,6 +10,7 @@ const createdContexts: BrowserContext[] = [];
 
 export const test = base.extend<{ _deviceCleanup: void }>({
   _deviceCleanup: [
+    // eslint-disable-next-line no-empty-pattern -- Playwright fixture signature
     async ({}, use) => {
       await use(undefined);
       while (createdContexts.length > 0) {
