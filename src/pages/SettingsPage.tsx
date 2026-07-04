@@ -125,7 +125,7 @@ export function SettingsPage() {
         </Section>
 
         <p className="pt-2 text-center text-xs text-slate-400">
-          ChatSend v0.7.0 · MVP
+          ChatSend v0.8.0 · MVP
         </p>
       </div>
     </Layout>

@@ -12,11 +12,12 @@ is uploaded to a server — and history is kept **locally** in the browser.
 
 ## Status
 
-✅ **MVP complete + production-ready (Phase 6).** Pairing (code or QR scan),
+✅ **MVP complete + production-ready (Phase 7).** Pairing (code or QR scan),
 text messaging, chunked P2P file transfer with accept/decline + progress +
-retry, multi-file queue, drag & drop, full history with filters. A 12-test
-Playwright suite runs the whole stack (two browsers + real WebRTC) in CI on
-every push, and deployment is one Node process or one Docker image.
+retry, multi-file queue, drag & drop, full history with filters, and PWA
+install mode (offline app shell). A 14-test Playwright suite runs the whole
+stack (two browsers + real WebRTC) in CI on every push, and deployment is one
+Node process or one Docker image.
 
 ## Tech stack
 
@@ -62,7 +63,9 @@ The E2E suite (`e2e/`) drives **two real browser contexts** through the whole
 stack — Vite, the signalling server, and an actual WebRTC DataChannel between
 the pages. It covers pairing, disconnects, error paths, bidirectional text,
 history persistence/search/filters, a SHA-256-verified 2 MB file transfer,
-decline→retry, the multi-file queue, drag & drop, and QR auto-join.
+decline→retry, the multi-file queue, drag & drop, QR auto-join, and the PWA
+(manifest metadata + service-worker offline shell against the production
+server — build first: `npm run build`).
 
 ```bash
 npx playwright install chromium   # once
@@ -177,6 +180,9 @@ The four core entities (defined in `src/types/index.ts`):
 - [x] **Phase 6** — Engineering: in-repo Playwright E2E suite, GitHub Actions
       CI, single-process production server (static + /ws), Dockerfile,
       configurable ICE/TURN servers.
+- [x] **Phase 7** — PWA install mode (req §4): manifest + icons (incl.
+      maskable), auto-updating service worker precaching the app shell,
+      verified offline load in E2E.
 
 ### v0.2 candidates (not started)
 

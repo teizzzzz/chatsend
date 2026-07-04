@@ -4,6 +4,24 @@ All notable changes to ChatSend are documented here. The format is loosely
 based on [Keep a Changelog](https://keepachangelog.com/), and the project
 follows a phase-based roadmap (see the README).
 
+## [0.8.0] — Phase 7: PWA install mode
+
+Completes the last open item of the MVP platform scope (req §4: PWA 安装模式).
+Verified in E2E against the production server: manifest metadata, icon
+availability, and a full offline reload served from the service worker.
+
+### Added
+
+- **Web App Manifest** via `vite-plugin-pwa`: name, standalone display,
+  theme/background colors, 192/512 icons plus a maskable 512 variant and an
+  apple-touch-icon (rendered from the brand logo).
+- **Service worker** (auto-updating, Workbox `generateSW`): precaches the
+  app shell (JS/CSS/HTML/icons) with an SPA navigate fallback — the app
+  opens instantly and works offline for history/settings; `/ws` and
+  WebRTC traffic are untouched.
+- **E2E coverage** (`e2e/pwa.spec.ts`): manifest + icons served correctly;
+  offline reload renders the app and client-side routing still works.
+
 ## [0.7.0] — Phase 6: Test suite, CI, production deployment
 
 ### Added
